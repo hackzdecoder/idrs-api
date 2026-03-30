@@ -21,7 +21,7 @@ return [
 
   'allowed_origins' => [
     'http://localhost:5005',
-    'https://idr-school-portal.schoolmanagerph.com'
+    'https://idrs.schoolmanagerph.com'
   ],
 
   'allowed_origins_patterns' => [],
