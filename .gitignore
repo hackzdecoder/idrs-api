@@ -1,0 +1,43 @@
+# Dependencies
+/vendor
+/node_modules
+
+# Environment files
+.env
+.env.backup
+.env.production
+
+# Storage
+/storage/*.key
+/storage/pail
+
+# Public assets
+/public/build
+/public/hot
+/public/storage
+
+# Cache and logs
+.phpunit.result.cache
+/.phpunit.cache
+*.log
+npm-debug.log
+yarn-error.log
+
+# IDE files
+/.idea
+/.vscode
+/.fleet
+/.nova
+/.zed
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Homestead
+Homestead.json
+Homestead.yaml
+
+# Composer
+composer.phar
+auth.json
