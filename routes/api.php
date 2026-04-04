@@ -3,6 +3,7 @@
 use App\Http\Controllers\API\AuthenticationController;
 use App\Http\Controllers\API\StudentController;
 use App\Http\Controllers\API\ProfileController;
+use App\Http\Controllers\API\TrademarkController;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Route;
 
@@ -17,6 +18,9 @@ Route::post('/student/login', [AuthenticationController::class, 'authenticate_st
 
 // Admin/Super Admin login (separate endpoint)
 Route::post('/admin/login', [AuthenticationController::class, 'authenticate_admin']);
+
+// Footer Company
+Route::get('/footer', [TrademarkController::class, 'footer']);
 
 Route::middleware(['auth:sanctum'])->group(function () {
 

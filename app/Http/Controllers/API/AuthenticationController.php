@@ -42,6 +42,8 @@ class AuthenticationController extends Controller
       }
 
       $user = null;
+      $studentInfo = null;
+      $redirectTo = null;
 
       // Handle Admin Login
       if ($isAdminLogin) {
@@ -68,57 +70,30 @@ class AuthenticationController extends Controller
 
       // Handle Student Login
       if ($isStudentLogin) {
-        // Find the user
+        // Find user with exact match
         $user = User::where('student_id', $request->student_id)
           ->where('school_code', $request->school_code)
+          ->where('mobile_number', $request->mobile_no)
           ->first();
 
         if (!$user) {
-          // Get student info for creating user
-          $studentInfo = StudentIdInfo::where('student_id', $request->student_id)
-            ->where('school_code', $request->school_code)
-            ->first();
+          RateLimiter::hit($key, 60);
+          return new JsonResponse([
+            'success' => false,
+            'error' => 'Invalid student credentials'
+          ], 401);
+        }
 
-          if (!$studentInfo) {
-            RateLimiter::hit($key, 60);
-            return new JsonResponse([
-              'success' => false,
-              'error' => 'Student record not found'
-            ], 401);
-          }
+        // Get student info from student_id_info table
+        $studentInfo = StudentIdInfo::where('student_id', $request->student_id)
+          ->where('school_code', $request->school_code)
+          ->first();
 
-          // Create new user
-          $user = User::create([
-            'student_id' => $request->student_id,
-            'school_code' => $request->school_code,
-            'user_role' => 'Student',
-            'mobile_number' => $request->mobile_no,
-            'account_name' => trim(
-              $studentInfo->first_name . ' ' .
-              ($studentInfo->middle_initial ? $studentInfo->middle_initial . '. ' : '') .
-              $studentInfo->surname .
-              ($studentInfo->suffix_name ? ' ' . $studentInfo->suffix_name : '')
-            ),
-            'account_status' => $studentInfo->account_status ?? 'active',
-            'email' => $studentInfo->parent_email,
-          ]);
+        // Check id_info_status to determine redirect
+        if ($studentInfo && strtolower($studentInfo->id_info_status) === 'pending') {
+          $redirectTo = '/profile'; // Redirect to profile page for pending approval
         } else {
-          // Update existing user if needed
-          $updated = false;
-
-          if ($user->user_role !== 'Student') {
-            $user->user_role = 'Student';
-            $updated = true;
-          }
-
-          if ($user->mobile_number !== $request->mobile_no) {
-            $user->mobile_number = $request->mobile_no;
-            $updated = true;
-          }
-
-          if ($updated) {
-            $user->save();
-          }
+          $redirectTo = '/'; // Redirect to dashboard for approved/completed
         }
       }
 
@@ -155,10 +130,7 @@ class AuthenticationController extends Controller
       if ($user->user_role === 'Student') {
         $userData['student_id'] = $user->student_id;
         $userData['school_code'] = $user->school_code;
-
-        $studentInfo = StudentIdInfo::where('student_id', $user->student_id)
-          ->where('school_code', $user->school_code)
-          ->first();
+        $userData['redirect_to'] = $redirectTo; // Add redirect_to to user data
 
         if ($studentInfo) {
           $userData['student_info'] = [
@@ -166,6 +138,7 @@ class AuthenticationController extends Controller
             'surname' => $studentInfo->surname,
             'level' => $studentInfo->level,
             'section_course' => $studentInfo->section_course,
+            'id_info_status' => $studentInfo->id_info_status,
           ];
         }
       }
@@ -181,6 +154,7 @@ class AuthenticationController extends Controller
         'user' => $userData,
         'access_token' => $accessToken,
         'access_expires_at' => $accessExpiresAt->toDateTimeString(),
+        'redirect_to' => $redirectTo, // Send redirect_to at root level
       ], 200);
 
       // Set refresh token cookie
