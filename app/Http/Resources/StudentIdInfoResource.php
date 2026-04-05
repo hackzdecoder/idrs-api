@@ -50,7 +50,6 @@ class StudentIdInfoResource extends JsonResource
       'id_reprint_count' => $this->id_reprint_count,
       'sms_app_credentials' => $this->sms_app_credentials,
       'sms_app_created_at' => $this->sms_app_created_at,
-      'account_status' => $this->account_status,
       'created_at' => $this->created_at,
     ];
   }

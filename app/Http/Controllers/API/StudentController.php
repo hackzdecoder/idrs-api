@@ -293,7 +293,7 @@ class StudentController extends Controller
 
       $validated = $request->validate([
         'first_name' => 'sometimes|string|max:255',
-        'middle_initial' => 'nullable|string|max:1',
+        'middle_initial' => 'nullable|string|max:255', // Changed from max:1 to max:255
         'surname' => 'sometimes|string|max:255',
         'suffix_name' => 'nullable|string|max:50',
         'nick_name' => 'nullable|string|max:255',
@@ -305,6 +305,9 @@ class StudentController extends Controller
         'parent_first_name' => 'nullable|string|max:255',
         'parent_surname' => 'nullable|string|max:255',
         'parent_email' => 'nullable|email|max:255',
+        'name_to_appear_on_id' => 'nullable|string|max:255', // Add this if needed
+        'esc_voucher_recipient' => 'nullable|boolean', // Add this if needed
+        'esc_number' => 'nullable|string|max:255', // Add this if needed
       ]);
 
       // Process each field - set to null if empty string
@@ -319,9 +322,9 @@ class StudentController extends Controller
 
       $studentInfo->update($dataToUpdate);
 
-      if (isset($validated['first_name']) || isset($validated['surname'])) {
+      if (isset($validated['first_name']) || isset($validated['surname']) || isset($validated['middle_initial'])) {
         $fullName = ($validated['first_name'] ?? $studentInfo->first_name) . ' ' .
-          ($studentInfo->middle_initial ? $studentInfo->middle_initial . '. ' : '') .
+          (($validated['middle_initial'] ?? $studentInfo->middle_initial) ? ($validated['middle_initial'] ?? $studentInfo->middle_initial) . ' ' : '') .
           ($validated['surname'] ?? $studentInfo->surname);
 
         $user->update(['account_name' => $fullName]);
@@ -332,7 +335,7 @@ class StudentController extends Controller
 
       $fullName = trim(
         $studentInfo->first_name . ' ' .
-        ($studentInfo->middle_initial ? $studentInfo->middle_initial . '. ' : '') .
+        ($studentInfo->middle_initial ? $studentInfo->middle_initial . ' ' : '') .
         $studentInfo->surname .
         ($studentInfo->suffix_name ? ' ' . $studentInfo->suffix_name : '')
       );
@@ -366,7 +369,6 @@ class StudentController extends Controller
           'id_print_status' => $studentInfo->id_print_status,
           'account_status' => $studentInfo->account_status,
           'created_at' => $studentInfo->created_at,
-          // Added missing parent fields
           'parent_first_name' => $studentInfo->parent_first_name,
           'parent_surname' => $studentInfo->parent_surname,
           'parent_email' => $studentInfo->parent_email,

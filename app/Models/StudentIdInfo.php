@@ -55,7 +55,6 @@ class StudentIdInfo extends Model
     'id_reprint_count',
     'sms_app_credentials',
     'sms_app_created_at',
-    'account_status',
     'created_at',
   ];
 
@@ -69,16 +68,6 @@ class StudentIdInfo extends Model
     'created_at' => 'datetime',
     'id_reprint_count' => 'integer',
     'esc_voucher_recipient' => 'boolean',
-    'middle_initial' => 'string',
-    'suffix_name' => 'string',
-    'nick_name' => 'string',
-    'gender' => 'string',
-    'residential_address' => 'string',
-    'emergency_contact_person' => 'string',
-    'emergency_contact_number' => 'string',
-    'parent_first_name' => 'string',
-    'parent_surname' => 'string',
-    'parent_email' => 'string',
   ];
 
   protected $hidden = [];
@@ -90,6 +79,51 @@ class StudentIdInfo extends Model
   {
     return $this->belongsTo(User::class, 'student_id', 'student_id')
       ->where('users.school_code', '=', $this->school_code);
+  }
+
+  /**
+   * Scope a query to search using FULLTEXT index
+   */
+  public function scopeSearch(Builder $query, string $term): Builder
+  {
+    return $query->whereFullText([
+      'id',
+      'school_code',
+      'student_id',
+      'first_name',
+      'middle_initial',
+      'surname',
+      'suffix_name',
+      'name_to_appear_on_id',
+      'nick_name',
+      'birth_date',
+      'gender',
+      'residential_address',
+      'emergency_contact_person',
+      'emergency_contact_number',
+      'student_picture',
+      'level',
+      'section_course',
+      'lrn',
+      'student_type',
+      'esc_voucher_recipient',
+      'esc_number',
+      'parent_first_name',
+      'parent_surname',
+      'parent_email',
+      'id_info_status',
+      'id_info_approval_date',
+      'class_details_status',
+      'class_details_approval_date',
+      'id_print_status',
+      'id_print_date',
+      'id_reprint_status',
+      'id_reprint_date',
+      'id_reprint_count',
+      'sms_app_credentials',
+      'sms_app_created_at',
+      'created_at'
+    ], $term);
   }
 
   /**
