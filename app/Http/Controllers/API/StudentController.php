@@ -93,6 +93,7 @@ class StudentController extends Controller
           'id_info_status' => $studentInfo->id_info_status,
           'class_details_status' => $studentInfo->class_details_status,
           'id_print_status' => $studentInfo->id_print_status,
+          'id_reprint_status' => $studentInfo->id_reprint_status, // ADD THIS LINE
           'account_status' => $studentInfo->account_status,
           'created_at' => $studentInfo->created_at,
         ]
@@ -195,20 +196,30 @@ class StudentController extends Controller
 
   /**
    * Get all students list with filters using Query Scopes
+   * For Admin: filters by their school_code
+   * For Super Admin: shows all students
    */
   public function index(Request $request): JsonResponse
   {
     try {
-      // Use query scopes to apply filters
-      $students = StudentIdInfo::query()
+      $user = $request->user();
+
+      // Build query
+      $query = StudentIdInfo::query()
         ->withUser()
         ->bySchoolCode($request->school_code)
         ->byStudentId($request->student_id)
         ->byIdInfoStatus($request->id_info_status)
         ->byDateRange($request->date_from, $request->date_to)
         ->byEmail($request->email)
-        ->latest()
-        ->get();
+        ->latest();
+
+      // If user is Admin (not Super Admin), filter by their school_code
+      if ($user && $user->user_role === 'Admin') {
+        $query->where('school_code', $user->school_code);
+      }
+
+      $students = $query->get();
 
       $studentData = $students->map(function ($student) {
         $fullName = trim(
@@ -246,6 +257,7 @@ class StudentController extends Controller
             ? $student->emergency_contact_person . ' - ' . $student->emergency_contact_number
             : null,
           'created_at' => $student->created_at,
+          'name_to_appear_on_id' => $student->name_to_appear_on_id,
         ];
       });
 
@@ -293,7 +305,7 @@ class StudentController extends Controller
 
       $validated = $request->validate([
         'first_name' => 'sometimes|string|max:255',
-        'middle_initial' => 'nullable|string|max:255', // Changed from max:1 to max:255
+        'middle_initial' => 'nullable|string|max:255',
         'surname' => 'sometimes|string|max:255',
         'suffix_name' => 'nullable|string|max:50',
         'nick_name' => 'nullable|string|max:255',
@@ -305,9 +317,9 @@ class StudentController extends Controller
         'parent_first_name' => 'nullable|string|max:255',
         'parent_surname' => 'nullable|string|max:255',
         'parent_email' => 'nullable|email|max:255',
-        'name_to_appear_on_id' => 'nullable|string|max:255', // Add this if needed
-        'esc_voucher_recipient' => 'nullable|boolean', // Add this if needed
-        'esc_number' => 'nullable|string|max:255', // Add this if needed
+        'name_to_appear_on_id' => 'nullable|string|max:255',
+        'esc_voucher_recipient' => 'nullable|boolean',
+        'esc_number' => 'nullable|string|max:255',
       ]);
 
       // Process each field - set to null if empty string
@@ -319,6 +331,10 @@ class StudentController extends Controller
           $dataToUpdate[$key] = $value;
         }
       }
+
+      // Update id_info_status to 'approved' and set approval date
+      $dataToUpdate['id_info_status'] = 'approved';
+      $dataToUpdate['id_info_approval_date'] = now();
 
       $studentInfo->update($dataToUpdate);
 
@@ -342,7 +358,7 @@ class StudentController extends Controller
 
       return new JsonResponse([
         'success' => true,
-        'response' => 'Profile updated successfully',
+        'response' => 'Profile updated and approved successfully',
         'data' => [
           'id' => $studentInfo->id,
           'student_id' => $studentInfo->student_id,
@@ -365,6 +381,7 @@ class StudentController extends Controller
           'lrn' => $studentInfo->lrn,
           'student_type' => $studentInfo->student_type,
           'id_info_status' => $studentInfo->id_info_status,
+          'id_info_approval_date' => $studentInfo->id_info_approval_date,
           'class_details_status' => $studentInfo->class_details_status,
           'id_print_status' => $studentInfo->id_print_status,
           'account_status' => $studentInfo->account_status,

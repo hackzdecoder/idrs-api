@@ -105,6 +105,10 @@ class AuthenticationController extends Controller
         ], 403);
       }
 
+      // ✅ NEW: Record last successful login timestamp
+      $user->last_successful_login = now();
+      $user->save();
+
       RateLimiter::clear($key);
 
       // Delete existing tokens
@@ -130,7 +134,7 @@ class AuthenticationController extends Controller
       if ($user->user_role === 'Student') {
         $userData['student_id'] = $user->student_id;
         $userData['school_code'] = $user->school_code;
-        $userData['redirect_to'] = $redirectTo; // Add redirect_to to user data
+        $userData['redirect_to'] = $redirectTo;
 
         if ($studentInfo) {
           $userData['student_info'] = [
@@ -154,7 +158,7 @@ class AuthenticationController extends Controller
         'user' => $userData,
         'access_token' => $accessToken,
         'access_expires_at' => $accessExpiresAt->toDateTimeString(),
-        'redirect_to' => $redirectTo, // Send redirect_to at root level
+        'redirect_to' => $redirectTo,
       ], 200);
 
       // Set refresh token cookie
