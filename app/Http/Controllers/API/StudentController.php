@@ -25,7 +25,6 @@ class StudentController extends Controller
         ], 401);
       }
 
-      // Check if user role is Student
       if ($user->user_role !== 'Student') {
         return new JsonResponse([
           'success' => false,
@@ -33,7 +32,6 @@ class StudentController extends Controller
         ], 403);
       }
 
-      // Check if user has student_id and school_code
       if (!$user->student_id || !$user->school_code) {
         return new JsonResponse([
           'success' => false,
@@ -41,7 +39,6 @@ class StudentController extends Controller
         ], 404);
       }
 
-      // Get student info with user relationship using scope
       $studentInfo = StudentIdInfo::withUser()
         ->where('student_id', $user->student_id)
         ->where('school_code', $user->school_code)
@@ -93,7 +90,7 @@ class StudentController extends Controller
           'id_info_status' => $studentInfo->id_info_status,
           'class_details_status' => $studentInfo->class_details_status,
           'id_print_status' => $studentInfo->id_print_status,
-          'id_reprint_status' => $studentInfo->id_reprint_status, // ADD THIS LINE
+          'id_reprint_status' => $studentInfo->id_reprint_status,
           'account_status' => $studentInfo->account_status,
           'created_at' => $studentInfo->created_at,
         ]
@@ -130,7 +127,6 @@ class StudentController extends Controller
         ], 404);
       }
 
-      // Get student info with user relationship using scope
       $student = StudentIdInfo::withUser()
         ->where('student_id', $user->student_id)
         ->where('school_code', $user->school_code)
@@ -204,17 +200,20 @@ class StudentController extends Controller
     try {
       $user = $request->user();
 
-      // Build query
       $query = StudentIdInfo::query()
         ->withUser()
         ->bySchoolCode($request->school_code)
         ->byStudentId($request->student_id)
+        ->byStudentType($request->student_type)
         ->byIdInfoStatus($request->id_info_status)
+        ->byClassDetailsStatus($request->class_details_status)
+        ->byIdPrintStatus($request->id_print_status)
+        ->byIdReprintStatus($request->id_reprint_status)
+        ->byAccountStatus($request->account_status)
         ->byDateRange($request->date_from, $request->date_to)
         ->byEmail($request->email)
         ->latest();
 
-      // If user is Admin (not Super Admin), filter by their school_code
       if ($user && $user->user_role === 'Admin') {
         $query->where('school_code', $user->school_code);
       }
@@ -247,7 +246,8 @@ class StudentController extends Controller
           'id_info_status' => $student->id_info_status,
           'class_details_status' => $student->class_details_status,
           'id_print_status' => $student->id_print_status,
-          'account_status' => $student->account_status,
+          'id_reprint_status' => $student->id_reprint_status,
+          'account_status' => $student->user->account_status ?? null,
           'residential_address' => $student->residential_address,
           'parent_full_name' => $student->parent_first_name && $student->parent_surname
             ? $student->parent_first_name . ' ' . $student->parent_surname
@@ -322,7 +322,6 @@ class StudentController extends Controller
         'esc_number' => 'nullable|string|max:255',
       ]);
 
-      // Process each field - set to null if empty string
       $dataToUpdate = [];
       foreach ($validated as $key => $value) {
         if ($value === '') {
@@ -332,7 +331,6 @@ class StudentController extends Controller
         }
       }
 
-      // Update id_info_status to 'approved' and set approval date
       $dataToUpdate['id_info_status'] = 'approved';
       $dataToUpdate['id_info_approval_date'] = now();
 
@@ -346,7 +344,6 @@ class StudentController extends Controller
         $user->update(['account_name' => $fullName]);
       }
 
-      // Refresh the student info to get updated data
       $studentInfo->refresh();
 
       $fullName = trim(

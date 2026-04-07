@@ -16,7 +16,6 @@ class StudentIdInfo extends Model
 
   public $incrementing = true;
 
-  // Disable timestamps since your table doesn't have updated_at
   public $timestamps = false;
 
   protected $fillable = [
@@ -155,6 +154,63 @@ class StudentIdInfo extends Model
   {
     if ($status) {
       return $query->where('id_info_status', $status);
+    }
+    return $query;
+  }
+
+  /**
+   * Scope a query to filter by class details status.
+   */
+  public function scopeByClassDetailsStatus(Builder $query, ?string $status): Builder
+  {
+    if ($status) {
+      return $query->where('class_details_status', $status);
+    }
+    return $query;
+  }
+
+  /**
+   * Scope a query to filter by ID print status.
+   */
+  public function scopeByIdPrintStatus(Builder $query, ?string $status): Builder
+  {
+    if ($status) {
+      return $query->where('id_print_status', $status);
+    }
+    return $query;
+  }
+
+  /**
+   * Scope a query to filter by ID reprint status.
+   */
+  public function scopeByIdReprintStatus(Builder $query, ?string $status): Builder
+  {
+    if ($status) {
+      return $query->where('id_reprint_status', $status);
+    }
+    return $query;
+  }
+
+  /**
+   * Scope a query to filter by student type.
+   */
+  public function scopeByStudentType(Builder $query, ?string $studentType): Builder
+  {
+    if ($studentType) {
+      return $query->where('student_type', $studentType);
+    }
+    return $query;
+  }
+
+  /**
+   * Scope a query to filter by account status (from user relationship).
+   */
+  public function scopeByAccountStatus(Builder $query, ?string $status): Builder
+  {
+    if ($status) {
+      return $query->whereHas('user', function ($q) use ($status) {
+        $q->where('account_status', $status);
+      });
     }
     return $query;
   }
