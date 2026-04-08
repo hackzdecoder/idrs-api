@@ -7,6 +7,8 @@ use App\Models\StudentIdInfo;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Hash;
+use Carbon\Carbon;
 
 class StudentController extends Controller
 {
@@ -100,7 +102,7 @@ class StudentController extends Controller
       Log::error('Student profile fetch error: ' . $th->getMessage());
       return new JsonResponse([
         'success' => false,
-        'error' => 'Failed to fetch student profile: ' . $th->getMessage()
+        'error' => 'Failed to fetch student profile'
       ], 500);
     }
   }
@@ -185,7 +187,7 @@ class StudentController extends Controller
       Log::error('Failed to fetch student information: ' . $th->getMessage());
       return new JsonResponse([
         'success' => false,
-        'error' => 'Failed to fetch student information: ' . $th->getMessage()
+        'error' => 'Failed to fetch student information'
       ], 500);
     }
   }
@@ -268,11 +270,9 @@ class StudentController extends Controller
 
     } catch (\Throwable $th) {
       Log::error('Failed to fetch students: ' . $th->getMessage());
-      Log::error('Stack trace: ' . $th->getTraceAsString());
-
       return new JsonResponse([
         'success' => false,
-        'error' => 'Failed to fetch students: ' . $th->getMessage()
+        'error' => 'Failed to fetch students'
       ], 500);
     }
   }
@@ -320,6 +320,7 @@ class StudentController extends Controller
         'name_to_appear_on_id' => 'nullable|string|max:255',
         'esc_voucher_recipient' => 'nullable|boolean',
         'esc_number' => 'nullable|string|max:255',
+        'password' => 'nullable|string|min:8',
       ]);
 
       $dataToUpdate = [];
@@ -332,10 +333,18 @@ class StudentController extends Controller
       }
 
       $dataToUpdate['id_info_status'] = 'approved';
-      $dataToUpdate['id_info_approval_date'] = now();
+      $dataToUpdate['id_info_approval_date'] = Carbon::now()->setTimezone(config('app.timezone'));
 
       $studentInfo->update($dataToUpdate);
 
+      // Update user password if provided
+      if (!empty($validated['password'])) {
+        $user->update([
+          'password' => Hash::make($validated['password'])
+        ]);
+      }
+
+      // Update account name
       if (isset($validated['first_name']) || isset($validated['surname']) || isset($validated['middle_initial'])) {
         $fullName = ($validated['first_name'] ?? $studentInfo->first_name) . ' ' .
           (($validated['middle_initial'] ?? $studentInfo->middle_initial) ? ($validated['middle_initial'] ?? $studentInfo->middle_initial) . ' ' : '') .
@@ -393,7 +402,7 @@ class StudentController extends Controller
       Log::error('Failed to update profile: ' . $th->getMessage());
       return new JsonResponse([
         'success' => false,
-        'error' => 'Failed to update profile: ' . $th->getMessage()
+        'error' => 'Failed to update profile'
       ], 500);
     }
   }

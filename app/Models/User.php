@@ -11,7 +11,7 @@ class User extends Authenticatable
 {
   use HasFactory, Notifiable, HasApiTokens;
 
-  public $timestamps = false;
+  public $timestamps = false; // Keep this as false
 
   protected $fillable = [
     'user_id',
@@ -26,6 +26,7 @@ class User extends Authenticatable
     'school_code',
     'account_name',
     'mobile_number',
+    'last_successful_login',
   ];
 
   protected $hidden = [
@@ -38,6 +39,7 @@ class User extends Authenticatable
     return [
       'email_verified_at' => 'datetime',
       'password' => 'hashed',
+      'last_successful_login' => 'datetime',
     ];
   }
 

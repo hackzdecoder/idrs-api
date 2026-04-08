@@ -45,6 +45,7 @@ return [
       'prefix_indexes' => true,
       'strict' => true,
       'engine' => null,
+      'timezone' => '+08:00', // ✅ Added for Philippines timezone
       'options' => extension_loaded('pdo_mysql') ? array_filter([
         PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
       ]) : [],
@@ -55,9 +56,9 @@ return [
     // ====================================================
     'trademarks' => [
       'driver' => 'mysql',
-      'host' => env('DB_HOST', '127.0.0.1'),
-      'port' => env('DB_PORT', '3306'),
-      // Use separate trademarks database based on environment
+      'url' => env('DB_URL'),
+      'host' => env('DB_HOST'),
+      'port' => env('DB_PORT'),
       'database' => env('APP_ENV') === 'dev'
         ? env('DB_TRADEMARKS_DATABASE_DEV', 'sm_trademark_dev')
         : env('DB_TRADEMARKS_DATABASE_PROD', 'u141085058_smdb_trademark'),
@@ -74,6 +75,7 @@ return [
       'prefix_indexes' => true,
       'strict' => true,
       'engine' => null,
+      'timezone' => '+08:00', // ✅ Added for Philippines timezone
       'options' => extension_loaded('pdo_mysql') ? array_filter([
         PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
       ]) : [],
