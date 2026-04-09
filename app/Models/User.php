@@ -11,13 +11,12 @@ class User extends Authenticatable
 {
   use HasFactory, Notifiable, HasApiTokens;
 
-  public $timestamps = false; // Keep this as false
+  public $timestamps = false;
 
   protected $fillable = [
     'user_id',
     'username',
     'school_email',
-    'email',
     'password',
     'user_role',
     'account_status',

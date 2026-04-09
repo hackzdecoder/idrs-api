@@ -4,30 +4,7 @@ use Illuminate\Support\Str;
 
 return [
 
-  /*
-  |--------------------------------------------------------------------------
-  | Default Database Connection Name
-  |--------------------------------------------------------------------------
-  |
-  | Here you may specify which of the database connections below you wish
-  | to use as your default connection for database operations. This is
-  | the connection which will be utilized unless another connection
-  | is explicitly specified when you execute a query / statement.
-  |
-  */
-
   'default' => env('DB_CONNECTION', 'sqlite'),
-
-  /*
-  |--------------------------------------------------------------------------
-  | Database Connections
-  |--------------------------------------------------------------------------
-  |
-  | Below are all of the database connections defined for your application.
-  | An example configuration is provided for each database system which
-  | is supported by Laravel. You're free to add / remove connections.
-  |
-  */
 
   'connections' => [
     'main_connection' => [
@@ -45,14 +22,14 @@ return [
       'prefix_indexes' => true,
       'strict' => true,
       'engine' => null,
-      'timezone' => '+08:00', // ✅ Added for Philippines timezone
+      'timezone' => '+08:00',
       'options' => extension_loaded('pdo_mysql') ? array_filter([
         PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
       ]) : [],
     ],
 
     // ====================================================
-    // TRADEMARKS DATABASE CONNECTION (Separate Database)
+    // TRADEMARKS DATABASE CONNECTION
     // ====================================================
     'trademarks' => [
       'driver' => 'mysql',
@@ -75,42 +52,46 @@ return [
       'prefix_indexes' => true,
       'strict' => true,
       'engine' => null,
-      'timezone' => '+08:00', // ✅ Added for Philippines timezone
+      'timezone' => '+08:00',
+      'options' => extension_loaded('pdo_mysql') ? array_filter([
+        PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
+      ]) : [],
+    ],
+
+    // ====================================================
+    // SMS USERS DATABASE CONNECTION
+    // ====================================================
+    'sms_users' => [
+      'driver' => 'mysql',
+      'host' => env('DB_HOST', '127.0.0.1'),
+      'port' => env('DB_PORT', '3306'),
+      'database' => env('APP_ENV') === 'dev'
+        ? env('DB_SMS_USERS_DATABASE_DEV', 'sm_users_dev')
+        : env('DB_SMS_USERS_DATABASE_PROD', 'u141085058_sms_users_db'),
+      'username' => env('APP_ENV') === 'dev'
+        ? env('DB_SMS_USERS_USERNAME_DEV', 'root')
+        : env('DB_SMS_USERS_USERNAME_PROD', 'u141085058_sms_users_main'),
+      'password' => env('APP_ENV') === 'dev'
+        ? env('DB_SMS_USERS_PASSWORD_DEV', '')
+        : env('DB_SMS_USERS_PASSWORD_PROD', 'M@trix103!'),
+      'charset' => 'utf8mb4',
+      'collation' => 'utf8mb4_unicode_ci',
+      'prefix' => '',
+      'strict' => true,
+      'engine' => null,
+      'timezone' => '+08:00',
       'options' => extension_loaded('pdo_mysql') ? array_filter([
         PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
       ]) : [],
     ],
   ],
 
-  /*
-  |--------------------------------------------------------------------------
-  | Migration Repository Table
-  |--------------------------------------------------------------------------
-  |
-  | This table keeps track of all the migrations that have already run for
-  | your application. Using this information, we can determine which of
-  | the migrations on disk haven't actually been run on the database.
-  |
-  */
-
   'migrations' => [
     'table' => 'migrations',
     'update_date_on_publish' => true,
   ],
 
-  /*
-  |--------------------------------------------------------------------------
-  | Redis Databases
-  |--------------------------------------------------------------------------
-  |
-  | Redis is an open source, fast, and advanced key-value store that also
-  | provides a richer body of commands than a typical key-value system
-  | such as Memcached. You may define your connection settings here.
-  |
-  */
-
   'redis' => [
-
     'client' => env('REDIS_CLIENT', 'phpredis'),
 
     'options' => [

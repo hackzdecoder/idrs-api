@@ -8,7 +8,10 @@ use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Carbon\Carbon;
+use App\Helpers\DatabaseManager;
 
 class StudentController extends Controller
 {
@@ -93,7 +96,6 @@ class StudentController extends Controller
           'class_details_status' => $studentInfo->class_details_status,
           'id_print_status' => $studentInfo->id_print_status,
           'id_reprint_status' => $studentInfo->id_reprint_status,
-          'account_status' => $studentInfo->account_status,
           'created_at' => $studentInfo->created_at,
         ]
       ], 200);
@@ -166,7 +168,6 @@ class StudentController extends Controller
         'id_info_status' => $student->id_info_status,
         'class_details_status' => $student->class_details_status,
         'id_print_status' => $student->id_print_status,
-        'account_status' => $student->account_status,
         'residential_address' => $student->residential_address,
         'parent_full_name' => $student->parent_first_name && $student->parent_surname
           ? $student->parent_first_name . ' ' . $student->parent_surname
@@ -194,8 +195,6 @@ class StudentController extends Controller
 
   /**
    * Get all students list with filters using Query Scopes
-   * For Admin: filters by their school_code
-   * For Super Admin: shows all students
    */
   public function index(Request $request): JsonResponse
   {
@@ -239,7 +238,7 @@ class StudentController extends Controller
           'surname' => $student->surname,
           'middle_initial' => $student->middle_initial,
           'suffix_name' => $student->suffix_name,
-          'email' => $student->user->school_email ?? $student->user->email ?? null,
+          'email' => $student->user->school_email ?? null,
           'username' => $student->user->username ?? null,
           'level' => $student->level,
           'section_course' => $student->section_course,
@@ -249,7 +248,6 @@ class StudentController extends Controller
           'class_details_status' => $student->class_details_status,
           'id_print_status' => $student->id_print_status,
           'id_reprint_status' => $student->id_reprint_status,
-          'account_status' => $student->user->account_status ?? null,
           'residential_address' => $student->residential_address,
           'parent_full_name' => $student->parent_first_name && $student->parent_surname
             ? $student->parent_first_name . ' ' . $student->parent_surname
@@ -337,30 +335,70 @@ class StudentController extends Controller
 
       $studentInfo->update($dataToUpdate);
 
-      // Update user password if provided
+      // Update user record with required fields (IDRS users table)
+      $userUpdates = [];
+      $userUpdates['account_status'] = 'active';
+
+      // Set mobile_number (user_id does NOT exist in IDRS users table)
+      if (!empty($studentInfo->emergency_contact_number)) {
+        $userUpdates['mobile_number'] = $studentInfo->emergency_contact_number;
+      }
+
       if (!empty($validated['password'])) {
-        $user->update([
-          'password' => Hash::make($validated['password'])
-        ]);
+        $userUpdates['password'] = Hash::make($validated['password']);
+      }
+
+      if (!empty($studentInfo->parent_email)) {
+        $userUpdates['school_email'] = $studentInfo->parent_email;
+      }
+
+      if (empty($user->username)) {
+        $username = strtolower(substr($studentInfo->first_name, 0, 1) . $studentInfo->surname);
+        $userUpdates['username'] = $username;
       }
 
       // Update account name
-      if (isset($validated['first_name']) || isset($validated['surname']) || isset($validated['middle_initial'])) {
-        $fullName = ($validated['first_name'] ?? $studentInfo->first_name) . ' ' .
-          (($validated['middle_initial'] ?? $studentInfo->middle_initial) ? ($validated['middle_initial'] ?? $studentInfo->middle_initial) . ' ' : '') .
-          ($validated['surname'] ?? $studentInfo->surname);
+      $fullName = trim(
+        ($validated['first_name'] ?? $studentInfo->first_name) . ' ' .
+        (($validated['middle_initial'] ?? $studentInfo->middle_initial) ? ($validated['middle_initial'] ?? $studentInfo->middle_initial) . ' ' : '') .
+        ($validated['surname'] ?? $studentInfo->surname)
+      );
+      $userUpdates['account_name'] = $fullName;
 
-        $user->update(['account_name' => $fullName]);
+      if (!empty($userUpdates)) {
+        $user->update($userUpdates);
+      }
+
+      // ============================================================
+      // TASK 13: Create login credential in SMS users database
+      // user_id = emergency_contact_number (e.g., 09901234567)
+      // ============================================================
+      try {
+        $this->syncSmsUser($studentInfo, $validated);
+      } catch (\Exception $e) {
+        Log::error('TASK 13 FAILED (SMS User): ' . $e->getMessage());
+      }
+
+      // ============================================================
+      // TASK 14: Create student record in school-specific database
+      // user_id = emergency_contact_number (e.g., 09901234567)
+      // ============================================================
+      try {
+        $this->syncStudentRecord($studentInfo, $validated);
+      } catch (\Exception $e) {
+        Log::error('TASK 14 FAILED (Student Record): ' . $e->getMessage());
+      }
+
+      // ============================================================
+      // TASK 15: Send email to parent/guardian
+      // ============================================================
+      try {
+        $this->sendParentEmail($studentInfo, $validated);
+      } catch (\Exception $e) {
+        Log::error('TASK 15 FAILED (Email): ' . $e->getMessage());
       }
 
       $studentInfo->refresh();
-
-      $fullName = trim(
-        $studentInfo->first_name . ' ' .
-        ($studentInfo->middle_initial ? $studentInfo->middle_initial . ' ' : '') .
-        $studentInfo->surname .
-        ($studentInfo->suffix_name ? ' ' . $studentInfo->suffix_name : '')
-      );
 
       return new JsonResponse([
         'success' => true,
@@ -390,7 +428,6 @@ class StudentController extends Controller
           'id_info_approval_date' => $studentInfo->id_info_approval_date,
           'class_details_status' => $studentInfo->class_details_status,
           'id_print_status' => $studentInfo->id_print_status,
-          'account_status' => $studentInfo->account_status,
           'created_at' => $studentInfo->created_at,
           'parent_first_name' => $studentInfo->parent_first_name,
           'parent_surname' => $studentInfo->parent_surname,
@@ -398,12 +435,155 @@ class StudentController extends Controller
         ]
       ], 200);
 
-    } catch (\Throwable $th) {
-      Log::error('Failed to update profile: ' . $th->getMessage());
+    } catch (\Illuminate\Validation\ValidationException $e) {
       return new JsonResponse([
         'success' => false,
-        'error' => 'Failed to update profile'
+        'error' => 'Validation failed',
+        'errors' => $e->errors()
+      ], 422);
+    } catch (\Throwable $th) {
+      Log::error('Failed to update profile: ' . $th->getMessage());
+      Log::error('File: ' . $th->getFile() . ' Line: ' . $th->getLine());
+
+      return new JsonResponse([
+        'success' => false,
+        'error' => 'Failed to update profile: ' . $th->getMessage()
       ], 500);
     }
+  }
+
+  /**
+   * TASK 13: Sync user to SMS users database
+   * user_id = emergency_contact_number (e.g., 09901234567)
+   */
+  private function syncSmsUser($studentInfo, $validated): void
+  {
+    $schoolCode = strtoupper($studentInfo->school_code);
+    $userId = $studentInfo->emergency_contact_number;  // ✅ Emergency contact number
+    $username = strtolower(substr($studentInfo->first_name, 0, 1) . $studentInfo->surname);
+
+    $fullName = trim(
+      $studentInfo->first_name . ' ' .
+      ($studentInfo->middle_initial ? $studentInfo->middle_initial . ' ' : '') .
+      $studentInfo->surname .
+      ($studentInfo->suffix_name ? ' ' . $studentInfo->suffix_name : '')
+    );
+
+    $existingUser = DB::connection('sms_users')
+      ->table('users')
+      ->where('user_id', $userId)
+      ->orWhere('username', $username)
+      ->orWhere('email', $studentInfo->parent_email)
+      ->first();
+
+    if (!$existingUser) {
+      DB::connection('sms_users')->table('users')->insert([
+        'user_id' => $userId,  // ✅ Emergency contact number
+        'username' => $username,
+        'email' => $studentInfo->parent_email,
+        'password' => Hash::make($validated['password'] ?? 'Default@123'),
+        'fullname' => $fullName,
+        'school_code' => $schoolCode,
+        'account_status' => 'active',
+        'created_at' => Carbon::now(),
+        'updated_at' => Carbon::now(),
+      ]);
+
+      Log::info("SMS User created: {$username} ({$userId})");
+    } else {
+      Log::info("SMS User already exists: {$username}");
+    }
+  }
+
+  /**
+   * TASK 14: Sync student record to school-specific database
+   * user_id = emergency_contact_number (e.g., 09901234567)
+   */
+  private function syncStudentRecord($studentInfo, $validated): void
+  {
+    $schoolCode = $studentInfo->school_code;
+    $studentId = $studentInfo->student_id;
+    $userId = $studentInfo->emergency_contact_number;  // ✅ Emergency contact number
+
+    $fullName = trim(
+      $studentInfo->first_name . ' ' .
+      ($studentInfo->middle_initial ? $studentInfo->middle_initial . ' ' : '') .
+      $studentInfo->surname .
+      ($studentInfo->suffix_name ? ' ' . $studentInfo->suffix_name : '')
+    );
+
+    $databaseName = DatabaseManager::connectToSchoolDatabase($schoolCode);
+
+    $existingRecord = DB::connection($databaseName)
+      ->table('student_records')
+      ->where('student_id', $studentId)
+      ->orWhere('user_id', $userId)
+      ->first();
+
+    if (!$existingRecord) {
+      DB::connection($databaseName)->table('student_records')->insert([
+        'user_id' => $userId,  // ✅ Emergency contact number
+        'student_id' => $studentId,
+        'fullname' => $fullName,
+        'nickname' => $studentInfo->nick_name ?? $studentInfo->first_name,
+        'gender' => $studentInfo->gender,
+        'course' => $studentInfo->section_course,
+        'level' => $studentInfo->level,
+        'section' => $studentInfo->section_course,
+        'email' => $studentInfo->parent_email,
+        'mobile_number' => $studentInfo->emergency_contact_number,
+        'lrn' => $studentInfo->lrn,
+        'created_at' => Carbon::now(),
+        'updated_at' => Carbon::now(),
+      ]);
+
+      Log::info("Student record created in {$databaseName}: {$studentId}");
+    } else {
+      Log::info("Student record already exists in {$databaseName}: {$studentId}");
+    }
+  }
+
+  /**
+   * TASK 15: Send email to parent/guardian
+   */
+  private function sendParentEmail($studentInfo, $validated): void
+  {
+    $parentEmail = $studentInfo->parent_email;
+
+    if (!$parentEmail) {
+      Log::warning("No parent email found for student: {$studentInfo->student_id}");
+      return;
+    }
+
+    $fullName = trim(
+      $studentInfo->first_name . ' ' .
+      ($studentInfo->middle_initial ? $studentInfo->middle_initial . ' ' : '') .
+      $studentInfo->surname
+    );
+
+    $parentFullName = trim(
+      ($studentInfo->parent_first_name ?? '') . ' ' .
+      ($studentInfo->parent_surname ?? '')
+    );
+
+    $username = strtolower(substr($studentInfo->first_name, 0, 1) . $studentInfo->surname);
+    $password = $validated['password'] ?? 'Default@123';
+
+    $emailData = [
+      'studentName' => $fullName,
+      'studentId' => $studentInfo->student_id,
+      'schoolCode' => strtoupper($studentInfo->school_code),
+      'username' => $username,
+      'password' => $password,
+      'loginUrl' => 'https://sms.schoolmanagerph.com',
+    ];
+
+    Mail::send('emails.parent-credentials', $emailData, function ($message) use ($parentEmail, $parentFullName) {
+      $message->to($parentEmail, $parentFullName ?: 'Parent/Guardian')
+        ->subject('SchoolMANAGER - Student Login Credentials')
+        ->from(config('mail.from.address'), config('mail.from.name'));
+    });
+
+    Log::info("Parent email sent to: {$parentEmail} for student: {$studentInfo->student_id}");
   }
 }
