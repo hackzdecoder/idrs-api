@@ -14,6 +14,12 @@ class SchoolIdResource extends JsonResource
    */
   public function toArray(Request $request): array
   {
-    return parent::toArray($request);
+    return [
+      'id' => $this->id,
+      'school_code' => $this->school_code,
+      'school_name' => $this->school_name,
+      'school_email' => $this->school_email,
+      'school_logo' => $this->school_logo,
+    ];
   }
 }

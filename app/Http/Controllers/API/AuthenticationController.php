@@ -10,6 +10,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Http\JsonResponse;
+use Carbon\Carbon;
 
 class AuthenticationController extends Controller
 {
@@ -105,8 +106,8 @@ class AuthenticationController extends Controller
         ], 403);
       }
 
-      // ✅ NEW: Record last successful login timestamp
-      $user->last_successful_login = now();
+      // ✅ FIX: Record last successful login timestamp with proper timezone
+      $user->last_successful_login = Carbon::now()->setTimezone('Asia/Manila');
       $user->save();
 
       RateLimiter::clear($key);
@@ -117,13 +118,13 @@ class AuthenticationController extends Controller
       // Create tokens
       $accessToken = Tokens::createAccessToken($user);
       $refreshToken = Tokens::createRefreshToken($user);
-      $accessExpiresAt = now()->addHours(8);
+      $accessExpiresAt = Carbon::now()->setTimezone('Asia/Manila')->addHours(8);
 
       // Prepare user data
       $userData = [
         'id' => $user->id,
         'username' => $user->username,
-        'email' => $user->email,
+        'email' => $user->school_email ?? $user->email ?? null, // ✅ Use school_email
         'account_name' => $user->account_name,
         'role' => $user->user_role,
         'account_status' => $user->account_status,
@@ -214,7 +215,7 @@ class AuthenticationController extends Controller
       return new JsonResponse([
         'success' => true,
         'access_token' => $newAccessToken,
-        'access_expires_at' => now()->addHours(8)->toDateTimeString()
+        'access_expires_at' => Carbon::now()->setTimezone('Asia/Manila')->addHours(8)->toDateTimeString()
       ], 200);
 
     } catch (\Throwable $th) {
@@ -280,7 +281,7 @@ class AuthenticationController extends Controller
         'user' => [
           'id' => $user->id,
           'username' => $user->username,
-          'email' => $user->email,
+          'email' => $user->school_email ?? null, // ✅ Use school_email
           'role' => $user->user_role,
           'account_status' => $user->account_status,
         ]
