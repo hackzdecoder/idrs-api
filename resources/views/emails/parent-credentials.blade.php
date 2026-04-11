@@ -1,9 +1,10 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
-  <meta charset="utf-8">
-  <title>SchoolMANAGER - Student Login Credentials</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Welcome to SchoolMANAGER System</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -20,6 +21,7 @@
       background: #fff;
       border-radius: 8px;
       box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      overflow: hidden;
     }
 
     .header {
@@ -38,6 +40,34 @@
       padding: 30px;
     }
 
+    .section {
+      margin-bottom: 25px;
+    }
+
+    .section-title {
+      font-weight: 600;
+      color: #2563eb;
+      margin-bottom: 10px;
+      font-size: 16px;
+      border-bottom: 1px solid #e2e8f0;
+      padding-bottom: 5px;
+    }
+
+    .info-row {
+      display: flex;
+      margin-bottom: 8px;
+    }
+
+    .info-label {
+      font-weight: 600;
+      width: 220px;
+      color: #64748b;
+    }
+
+    .info-value {
+      color: #1e293b;
+    }
+
     .credentials-box {
       background: #f8fafc;
       border: 1px solid #e2e8f0;
@@ -46,11 +76,16 @@
       margin: 20px 0;
     }
 
+    .credential-item {
+      margin-bottom: 15px;
+    }
+
     .credential-label {
       font-weight: bold;
       color: #64748b;
       font-size: 14px;
       text-transform: uppercase;
+      letter-spacing: 0.5px;
     }
 
     .credential-value {
@@ -64,24 +99,39 @@
       margin-top: 5px;
     }
 
-    .button {
-      display: inline-block;
-      background: #2563eb;
-      color: white;
-      text-decoration: none;
-      padding: 12px 30px;
-      border-radius: 6px;
-      font-weight: bold;
+    .links {
       margin: 20px 0;
+      padding: 15px;
+      background: #f0f9ff;
+      border-left: 4px solid #2563eb;
+      border-radius: 4px;
+    }
+
+    .links a {
+      color: #2563eb;
+      text-decoration: none;
+      font-weight: 600;
     }
 
     .footer {
       background: #f8fafc;
       padding: 20px;
-      text-align: center;
       font-size: 12px;
       color: #64748b;
       border-top: 1px solid #e2e8f0;
+    }
+
+    .disclaimer {
+      font-size: 11px;
+      color: #94a3b8;
+      margin-top: 15px;
+      font-style: italic;
+    }
+
+    .note {
+      font-weight: 600;
+      color: #dc2626;
+      margin: 15px 0;
     }
   </style>
 </head>
@@ -89,37 +139,96 @@
 <body>
   <div class="container">
     <div class="header">
-      <h1>SchoolMANAGER</h1>
-      <p style="margin: 10px 0 0; opacity: 0.9;">Student Login Credentials</p>
+      <h1>Welcome to SchoolMANAGER System!</h1>
     </div>
+
     <div class="content">
-      <p>Dear Parent/Guardian,</p>
-      <p>Your child's student ID registration has been approved. Below are the login credentials for accessing the
-        SchoolMANAGER system.</p>
-      <div style="margin: 20px 0;">
-        <p><strong>Student Name:</strong> {{ $studentName }}</p>
-        <p><strong>Student ID:</strong> {{ $studentId }}</p>
-        <p><strong>School Code:</strong> {{ $schoolCode }}</p>
+      <p>This is to confirm that we have received the information that you have submitted for the printing of your
+        child's School ID Card. The details we received are as follows:</p>
+
+      <div class="section">
+        <div class="section-title">Submitted Information</div>
+        <div class="info-row">
+          <span class="info-label">Name to Appear on ID Card :</span>
+          <span class="info-value">{{ $name_to_appear_on_id ?? '—' }}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Residential Address :</span>
+          <span class="info-value">{{ $residential_address ?? '—' }}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Emergency Contact Person :</span>
+          <span class="info-value">{{ $emergency_contact_person ?? '—' }}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Emergency Contact Number :</span>
+          <span class="info-value">{{ $emergency_contact_number ?? '—' }}</span>
+        </div>
       </div>
+
+      <p><em>The following information below are subject to the school's final confirmation and approval.</em></p>
+
+      <div class="section">
+        <div class="info-row">
+          <span class="info-label">Level :</span>
+          <span class="info-value">{{ $level ?? '—' }}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Section/Course :</span>
+          <span class="info-value">{{ $section_course ?? '—' }}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">LRN :</span>
+          <span class="info-value">{{ $lrn ?? '—' }}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">ESC Number :</span>
+          <span class="info-value">{{ $esc_number ?? '—' }}</span>
+        </div>
+      </div>
+
+      <p>Below are the login credentials for accessing the SchoolMANAGER system.</p>
+
       <div class="credentials-box">
-        <div style="margin-bottom: 15px;">
+        <div class="credential-item">
           <div class="credential-label">Username</div>
-          <div class="credential-value">{{ $username }}</div>
+          <div class="credential-value">{{ $username ?? '—' }}</div>
         </div>
-        <div>
+        <div class="credential-item">
           <div class="credential-label">Password</div>
-          <div class="credential-value">{{ $password }}</div>
+          <div class="credential-value">{{ $password ?? '—' }}</div>
         </div>
       </div>
-      <p>Please keep these credentials safe.</p>
-      <div style="text-align: center;">
-        <a href="{{ $loginUrl }}" class="button">Login to SchoolMANAGER</a>
+
+      <p>Please keep your account credentials safe. For security reasons, we recommend changing your password from time
+        to time.</p>
+
+      <div class="links">
+        <p><strong>You can download the SchoolMANAGER mobile app at:</strong><br>
+          <a href="#">WEBSITE LINK</a> and install it on your mobile android device.
+        </p>
+
+        <p><strong>You can also access the web app at:</strong><br>
+          <a href="https://www.sms.schoolmanagerph.com">www.sms.schoolmanagerph.com</a>
+        </p>
       </div>
-      <p style="margin-top: 20px;"><strong>Important:</strong> For security reasons, we recommend changing your password
-        after your first login.</p>
+
+      <div class="note">
+        ***Please do not reply to this email. This is an automated confirmation that we have received your Student ID
+        and Mobile/Web App Registration Details.***
+      </div>
+
+      <div class="disclaimer">
+        This e-mail transmission is intended only for the addressee and may contain confidential information.
+        Confidentiality is not waived if you are not the intended recipient of this e-mail, nor may you use, review,
+        disclose, disseminate or copy any information contained in or attached to it. If you received this e-mail in
+        error please delete it and any attachments and notify us immediately by reply e-mail. TaparSoft Enterprise does
+        not warrant that any attachments are free from viruses or other defects. You assume all liability for any loss,
+        damage or other consequences which may arise from opening or using the attachments.
+      </div>
     </div>
+
     <div class="footer">
-      <p>This is an automated message from SchoolMANAGER. Please do not reply to this email.</p>
       <p>&copy; {{ date('Y') }} SchoolMANAGER. All rights reserved.</p>
     </div>
   </div>

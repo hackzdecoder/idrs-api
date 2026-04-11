@@ -97,6 +97,7 @@ class StudentController extends Controller
           'class_details_status' => $studentInfo->class_details_status,
           'id_print_status' => $studentInfo->id_print_status,
           'id_reprint_status' => $studentInfo->id_reprint_status,
+          'id_reprint_count' => $studentInfo->id_reprint_count,
           'created_at' => $studentInfo->created_at,
         ]
       ], 200);
@@ -169,6 +170,7 @@ class StudentController extends Controller
         'id_info_status' => $student->id_info_status,
         'class_details_status' => $student->class_details_status,
         'id_print_status' => $student->id_print_status,
+        'id_reprint_count' => $student->id_reprint_count,
         'residential_address' => $student->residential_address,
         'parent_full_name' => $student->parent_first_name && $student->parent_surname
           ? $student->parent_first_name . ' ' . $student->parent_surname
@@ -196,6 +198,8 @@ class StudentController extends Controller
 
   /**
    * Get all students list with filters using Query Scopes
+   * For Admin: filters by their school_code
+   * For Super Admin: shows all students
    */
   public function index(Request $request): JsonResponse
   {
@@ -249,6 +253,7 @@ class StudentController extends Controller
           'class_details_status' => $student->class_details_status,
           'id_print_status' => $student->id_print_status,
           'id_reprint_status' => $student->id_reprint_status,
+          'id_reprint_count' => $student->id_reprint_count ?? 0, // ✅ ADDED
           'residential_address' => $student->residential_address,
           'parent_full_name' => $student->parent_first_name && $student->parent_surname
             ? $student->parent_first_name . ' ' . $student->parent_surname
@@ -332,7 +337,7 @@ class StudentController extends Controller
       }
 
       $dataToUpdate['id_info_status'] = 'approved';
-      $dataToUpdate['id_info_approval_date'] = Carbon::now()->setTimezone('Asia/Manila');
+      $dataToUpdate['id_info_approval_date'] = Carbon::now('Asia/Manila');
 
       $studentInfo->update($dataToUpdate);
 
@@ -370,7 +375,7 @@ class StudentController extends Controller
       }
 
       // ============================================================
-      // ✅ CHECK IF USER ALREADY EXISTS IN SMS DATABASE
+      // CHECK IF USER ALREADY EXISTS IN SMS DATABASE
       // ============================================================
       $userId = $studentInfo->emergency_contact_number;
       $existingSmsUser = null;
@@ -388,7 +393,6 @@ class StudentController extends Controller
 
       // ============================================================
       // TASK 13: Create login credential in SMS users database
-      // ONLY if user does NOT already exist
       // ============================================================
       if (!$existingSmsUser) {
         try {
@@ -402,7 +406,6 @@ class StudentController extends Controller
 
       // ============================================================
       // TASK 14: Create student record in school-specific database
-      // ONLY if SMS user did NOT already exist
       // ============================================================
       if (!$existingSmsUser) {
         try {
@@ -453,6 +456,7 @@ class StudentController extends Controller
           'id_info_approval_date' => $studentInfo->id_info_approval_date,
           'class_details_status' => $studentInfo->class_details_status,
           'id_print_status' => $studentInfo->id_print_status,
+          'id_reprint_count' => $studentInfo->id_reprint_count,
           'created_at' => $studentInfo->created_at,
           'parent_first_name' => $studentInfo->parent_first_name,
           'parent_surname' => $studentInfo->parent_surname,
@@ -479,19 +483,12 @@ class StudentController extends Controller
 
   /**
    * TASK 13: Sync user to SMS users database
-   * 
-   * Requirements:
-   * a. user_id and username = emergency_contact_number
-   * b. fullname = parent/guardian last name, parent/guardian first name (e.g., "Sager, PJ")
-   * c. gs_access_status = "pending"
-   * d. assigned_admin_email = school_email from school_id table based on school_code
    */
   private function syncSmsUser($studentInfo, $validated): void
   {
     try {
       $schoolCode = strtoupper($studentInfo->school_code);
 
-      // ✅ a. user_id and username = emergency_contact_number
       $userId = $studentInfo->emergency_contact_number;
       $username = $studentInfo->emergency_contact_number;
 
@@ -500,7 +497,6 @@ class StudentController extends Controller
         return;
       }
 
-      // ✅ b. fullname = parent/guardian last name, parent/guardian first name
       $parentLastName = $studentInfo->parent_surname ?? '';
       $parentFirstName = $studentInfo->parent_first_name ?? '';
       $fullname = $parentLastName;
@@ -509,7 +505,6 @@ class StudentController extends Controller
       }
       $fullname = trim($fullname, ', ');
 
-      // ✅ d. Get assigned_admin_email from school_id table using SchoolId model
       $assignedAdminEmail = SchoolId::getEmailByCode($schoolCode);
 
       $existingUser = DB::connection('sms_users')
@@ -530,8 +525,8 @@ class StudentController extends Controller
           'account_status' => 'active',
           'gs_access_status' => 'pending',
           'assigned_admin_email' => $assignedAdminEmail,
-          'created_at' => Carbon::now(),
-          'updated_at' => Carbon::now(),
+          'created_at' => Carbon::now('Asia/Manila'),
+          'updated_at' => Carbon::now('Asia/Manila'),
         ]);
 
         Log::info("SMS User created: {$username} ({$userId})");
@@ -545,20 +540,11 @@ class StudentController extends Controller
 
   /**
    * TASK 14: Sync student record to school-specific database
-   * 
-   * Requirements:
-   * a. user_id = emergency_contact_number
-   * b. fullname = parent/guardian last name, parent/guardian first name (e.g., "Sager, PJ")
-   * c. nickname = parent/guardian first name
-   * d. school_name = from school_id table based on school_code
-   * e. ONLY insert: user_id, fullname, nickname, school_name, created_at, updated_at
    */
   private function syncStudentRecord($studentInfo, $validated): void
   {
     try {
       $schoolCode = $studentInfo->school_code;
-
-      // ✅ a. user_id = emergency_contact_number
       $userId = $studentInfo->emergency_contact_number;
 
       if (empty($userId)) {
@@ -566,7 +552,6 @@ class StudentController extends Controller
         return;
       }
 
-      // ✅ b. fullname = parent/guardian last name, parent/guardian first name
       $parentLastName = $studentInfo->parent_surname ?? '';
       $parentFirstName = $studentInfo->parent_first_name ?? '';
 
@@ -581,18 +566,8 @@ class StudentController extends Controller
       }
       $fullname = trim($fullname, ', ');
 
-      // ✅ c. nickname = parent/guardian first name
       $nickname = $parentFirstName ?: 'Parent';
 
-      // ✅ d. school_name = from school_id table using SchoolId model
-      $schoolName = SchoolId::getNameByCode($schoolCode);
-
-      if (empty($schoolName)) {
-        Log::warning("No school name found for school code: {$schoolCode}");
-        $schoolName = strtoupper($schoolCode) . ' School';
-      }
-
-      // Connect to school database using DatabaseManager
       try {
         $databaseName = DatabaseManager::connectToSchoolDatabase($schoolCode);
       } catch (\Exception $e) {
@@ -600,33 +575,28 @@ class StudentController extends Controller
         return;
       }
 
-      // Check if student record already exists (by user_id)
       $existingRecord = DB::connection($databaseName)
         ->table('student_records')
         ->where('user_id', $userId)
         ->first();
 
       if (!$existingRecord) {
-        // ✅ e. ONLY insert these 6 fields
         DB::connection($databaseName)->table('student_records')->insert([
           'user_id' => $userId,
           'fullname' => $fullname,
           'nickname' => $nickname,
-          'school_name' => $schoolName,
-          'created_at' => Carbon::now(),
-          'updated_at' => Carbon::now(),
+          'created_at' => Carbon::now('Asia/Manila'),
+          'updated_at' => Carbon::now('Asia/Manila'),
         ]);
 
         Log::info("Student record created in {$databaseName} for user: {$userId}");
       } else {
-        // Update existing record - ONLY these fields
         DB::connection($databaseName)->table('student_records')
           ->where('user_id', $userId)
           ->update([
             'fullname' => $fullname,
             'nickname' => $nickname,
-            'school_name' => $schoolName,
-            'updated_at' => Carbon::now(),
+            'updated_at' => Carbon::now('Asia/Manila'),
           ]);
 
         Log::info("Student record updated in {$databaseName} for user: {$userId}");
@@ -649,12 +619,6 @@ class StudentController extends Controller
         return;
       }
 
-      $fullName = trim(
-        $studentInfo->first_name . ' ' .
-        ($studentInfo->middle_initial ? $studentInfo->middle_initial . ' ' : '') .
-        $studentInfo->surname
-      );
-
       $parentFullName = trim(
         ($studentInfo->parent_first_name ?? '') . ' ' .
         ($studentInfo->parent_surname ?? '')
@@ -664,17 +628,21 @@ class StudentController extends Controller
       $password = $validated['password'] ?? 'Default@123';
 
       $emailData = [
-        'studentName' => $fullName,
-        'studentId' => $studentInfo->student_id,
-        'schoolCode' => strtoupper($studentInfo->school_code),
+        'name_to_appear_on_id' => $studentInfo->name_to_appear_on_id ?? $studentInfo->first_name . ' ' . $studentInfo->surname,
+        'residential_address' => $studentInfo->residential_address ?? 'Not provided',
+        'emergency_contact_person' => $studentInfo->emergency_contact_person ?? 'Not provided',
+        'emergency_contact_number' => $studentInfo->emergency_contact_number ?? 'Not provided',
+        'level' => $studentInfo->level ?? 'Not provided',
+        'section_course' => $studentInfo->section_course ?? 'Not provided',
+        'lrn' => $studentInfo->lrn ?? 'Not provided',
+        'esc_number' => $studentInfo->esc_number ?? 'Not provided',
         'username' => $username,
         'password' => $password,
-        'loginUrl' => 'https://sms.schoolmanagerph.com',
       ];
 
       Mail::send('emails.parent-credentials', $emailData, function ($message) use ($parentEmail, $parentFullName) {
         $message->to($parentEmail, $parentFullName ?: 'Parent/Guardian')
-          ->subject('SchoolMANAGER - Student Login Credentials')
+          ->subject('Welcome to SchoolMANAGER System')
           ->from(config('mail.from.address'), config('mail.from.name'));
       });
 

@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Apr 10, 2026 at 06:40 PM
+-- Generation Time: Apr 09, 2026 at 10:46 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -196,20 +196,8 @@ CREATE TABLE `school_id` (
   `id` bigint(20) NOT NULL,
   `school_code` varchar(20) NOT NULL,
   `school_name` varchar(255) NOT NULL,
-  `school_email` varchar(255) DEFAULT NULL,
   `school_logo` varchar(255) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
---
--- Dumping data for table `school_id`
---
-
-INSERT INTO `school_id` (`id`, `school_code`, `school_name`, `school_email`, `school_logo`) VALUES
-(1, 'wlkae', 'West Lake Academy', 'admin@wlkae.edu.ph', 'wlkae_logo.png'),
-(2, 'sva', 'Sager Vision Academy', 'admin@sva.edu.ph', 'sva_logo.png'),
-(3, 'atheneum', 'Atheneum School', 'admin@atheneum.edu.ph', 'atheneum_logo.png'),
-(4, 'vision', 'Vision International School', 'admin@vision.edu.ph', 'vision_logo.png'),
-(5, 'gva', 'Golden Valley Academy', 'admin@gva.edu.ph', 'gva_logo.png');
 
 -- --------------------------------------------------------
 
@@ -540,7 +528,7 @@ ALTER TABLE `profiles`
 -- AUTO_INCREMENT for table `school_id`
 --
 ALTER TABLE `school_id`
-  MODIFY `id` bigint(20) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
+  MODIFY `id` bigint(20) NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `student_id_info`
