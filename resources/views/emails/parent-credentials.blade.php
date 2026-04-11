@@ -99,6 +99,13 @@
       margin-top: 5px;
     }
 
+    .password-note {
+      color: #dc2626;
+      font-size: 12px;
+      margin-top: 5px;
+      font-style: italic;
+    }
+
     .links {
       margin: 20px 0;
       padding: 15px;
@@ -197,6 +204,7 @@
         <div class="credential-item">
           <div class="credential-label">Password</div>
           <div class="credential-value">{{ $password ?? '—' }}</div>
+          <div class="password-note">(nominated password - not yet hashed)</div>
         </div>
       </div>
 
@@ -209,7 +217,7 @@
         </p>
 
         <p><strong>You can also access the web app at:</strong><br>
-          <a href="https://www.sms.schoolmanagerph.com">www.sms.schoolmanagerph.com</a>
+          <a href="https://sms.schoolmanagerph.com">www.sms.schoolmanagerph.com</a>
         </p>
       </div>
 

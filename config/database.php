@@ -10,11 +10,11 @@ return [
     'main_connection' => [
       'driver' => 'mysql',
       'url' => env('DB_URL'),
-      'host' => env('DB_HOST'),
-      'port' => env('DB_PORT'),
-      'database' => env('APP_ENV') === 'dev' ? env('DB_DATABASE_DEV') : env('DB_DATABASE_PROD'),
-      'username' => env('APP_ENV') === 'dev' ? env('DB_USERNAME_DEV') : env('DB_USERNAME_PROD'),
-      'password' => env('APP_ENV') === 'dev' ? env('DB_PASSWORD_DEV') : env('DB_PASSWORD_PROD'),
+      'host' => env('DB_HOST', '127.0.0.1'),
+      'port' => env('DB_PORT', '3306'),
+      'database' => env('APP_ENV') === 'dev' ? env('DB_DATABASE_IDRS_DEV') : env('DB_DATABASE_IDRS_PROD'),
+      'username' => env('APP_ENV') === 'dev' ? env('DB_USERNAME_IDRS_DEV') : env('DB_USERNAME_IDRS_PROD'),
+      'password' => env('APP_ENV') === 'dev' ? env('DB_PASSWORD_IDRS_DEV') : env('DB_PASSWORD_IDRS_PROD'),
       'unix_socket' => env('DB_SOCKET', ''),
       'charset' => env('DB_CHARSET', 'utf8mb4'),
       'collation' => env('DB_COLLATION', 'utf8mb4_unicode_ci'),
@@ -34,17 +34,17 @@ return [
     'trademarks' => [
       'driver' => 'mysql',
       'url' => env('DB_URL'),
-      'host' => env('DB_HOST'),
-      'port' => env('DB_PORT'),
+      'host' => env('DB_HOST', '127.0.0.1'),
+      'port' => env('DB_PORT', '3306'),
       'database' => env('APP_ENV') === 'dev'
-        ? env('DB_TRADEMARKS_DATABASE_DEV')
-        : env('DB_TRADEMARKS_DATABASE_PROD'),
+        ? env('DB_DATABASE_TRADEMARKS_DEV')
+        : env('DB_DATABASE_TRADEMARKS_PROD'),
       'username' => env('APP_ENV') === 'dev'
-        ? env('DB_TRADEMARKS_USERNAME_DEV')
-        : env('DB_TRADEMARKS_USERNAME_PROD'),
+        ? env('DB_USERNAME_TRADEMARKS_DEV')
+        : env('DB_USERNAME_TRADEMARKS_PROD'),
       'password' => env('APP_ENV') === 'dev'
-        ? env('DB_TRADEMARKS_PASSWORD_DEV')
-        : env('DB_TRADEMARKS_PASSWORD_PROD'),
+        ? env('DB_PASSWORD_TRADEMARKS_DEV')
+        : env('DB_PASSWORD_TRADEMARKS_PROD'),
       'unix_socket' => env('DB_SOCKET', ''),
       'charset' => 'utf8mb4',
       'collation' => 'utf8mb4_unicode_ci',
@@ -66,14 +66,14 @@ return [
       'host' => env('DB_HOST', '127.0.0.1'),
       'port' => env('DB_PORT', '3306'),
       'database' => env('APP_ENV') === 'dev'
-        ? env('DB_SMS_USERS_DATABASE_DEV', 'sm_users_dev')
-        : env('DB_SMS_USERS_DATABASE_PROD', 'u141085058_sms_users_db'),
+        ? env('DB_DATABASE_SMS_USERS_DEV')
+        : env('DB_DATABASE_SMS_USERS_PROD'),
       'username' => env('APP_ENV') === 'dev'
-        ? env('DB_SMS_USERS_USERNAME_DEV', 'root')
-        : env('DB_SMS_USERS_USERNAME_PROD', 'u141085058_sms_users_main'),
+        ? env('DB_USERNAME_SMS_USERS_DEV')
+        : env('DB_USERNAME_SMS_USERS_PROD'),
       'password' => env('APP_ENV') === 'dev'
-        ? env('DB_SMS_USERS_PASSWORD_DEV', '')
-        : env('DB_SMS_USERS_PASSWORD_PROD', 'M@trix103!'),
+        ? env('DB_PASSWORD_SMS_USERS_DEV')
+        : env('DB_PASSWORD_SMS_USERS_PROD'),
       'charset' => 'utf8mb4',
       'collation' => 'utf8mb4_unicode_ci',
       'prefix' => '',
