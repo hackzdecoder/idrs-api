@@ -37,14 +37,14 @@ return [
       'host' => env('DB_HOST'),
       'port' => env('DB_PORT'),
       'database' => env('APP_ENV') === 'dev'
-        ? env('DB_TRADEMARKS_DATABASE_DEV', 'sm_trademark_dev')
-        : env('DB_TRADEMARKS_DATABASE_PROD', 'u141085058_smdb_trademark'),
+        ? env('DB_TRADEMARKS_DATABASE_DEV')
+        : env('DB_TRADEMARKS_DATABASE_PROD'),
       'username' => env('APP_ENV') === 'dev'
-        ? env('DB_TRADEMARKS_USERNAME_DEV', 'root')
-        : env('DB_TRADEMARKS_USERNAME_PROD', 'u141085058_smdb_tm_root'),
+        ? env('DB_TRADEMARKS_USERNAME_DEV')
+        : env('DB_TRADEMARKS_USERNAME_PROD'),
       'password' => env('APP_ENV') === 'dev'
-        ? env('DB_TRADEMARKS_PASSWORD_DEV', '')
-        : env('DB_TRADEMARKS_PASSWORD_PROD', 'M@trix103!'),
+        ? env('DB_TRADEMARKS_PASSWORD_DEV')
+        : env('DB_TRADEMARKS_PASSWORD_PROD'),
       'unix_socket' => env('DB_SOCKET', ''),
       'charset' => 'utf8mb4',
       'collation' => 'utf8mb4_unicode_ci',
