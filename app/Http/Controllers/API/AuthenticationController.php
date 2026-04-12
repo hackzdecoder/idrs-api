@@ -16,7 +16,7 @@ use Carbon\Carbon;
 class AuthenticationController extends Controller
 {
   /**
-   * ✅ TASK 3: Check if mobile number and school code are already registered in SMS database
+   * ✅ TASK 1 & 3: Check if mobile number and school code are already registered in SMS database
    * 
    * @param string $mobileNumber The emergency contact number
    * @param string $schoolCode The school code
@@ -97,7 +97,7 @@ class AuthenticationController extends Controller
       $user = null;
       $studentInfo = null;
       $redirectTo = null;
-      $smsStatus = ['is_registered' => false, 'has_credentials' => false]; // ✅ TASK 3: Initialize SMS status
+      $smsStatus = ['is_registered' => false, 'has_credentials' => false];
 
       // Handle Admin Login
       if ($isAdminLogin) {
@@ -124,10 +124,11 @@ class AuthenticationController extends Controller
 
       // Handle Student Login
       if ($isStudentLogin) {
-        // Find user with exact match
+        // ✅ TASK 7: Only allow users with 'Student' role to login via student page
         $user = User::where('student_id', $request->student_id)
           ->where('school_code', $request->school_code)
           ->where('mobile_number', $request->mobile_no)
+          ->where('user_role', 'Student')  // ✅ Prevents Super Admin/Admin from student login
           ->first();
 
         if (!$user) {
@@ -143,7 +144,7 @@ class AuthenticationController extends Controller
           ->where('school_code', $request->school_code)
           ->first();
 
-        // ✅ TASK 3: Check SMS registration status with mobile number AND school code
+        // ✅ TASK 1: Check SMS registration status with mobile number AND school code
         $smsStatus = $this->checkSmsRegistrationStatus($request->mobile_no, $request->school_code);
 
         // Log the result for debugging
@@ -171,9 +172,20 @@ class AuthenticationController extends Controller
         ], 403);
       }
 
-      // ✅ FIX: Record last successful login timestamp with proper timezone
-      $user->last_successful_login = Carbon::now()->setTimezone('Asia/Manila');
-      $user->save();
+      // ✅ TASKS 3 & 4: Fix last_successful_login timestamp with proper timezone
+      // Use direct MySQL timezone conversion for Hostinger compatibility
+      if (app()->environment('production')) {
+        // Hostinger production - use CONVERT_TZ
+        DB::table('users')
+          ->where('id', $user->id)
+          ->update([
+            'last_successful_login' => DB::raw("CONVERT_TZ(NOW(), 'UTC', '+08:00')")
+          ]);
+      } else {
+        // Local development - use Carbon
+        $user->last_successful_login = Carbon::now('Asia/Manila');
+        $user->save();
+      }
 
       RateLimiter::clear($key);
 
@@ -183,7 +195,7 @@ class AuthenticationController extends Controller
       // Create tokens
       $accessToken = Tokens::createAccessToken($user);
       $refreshToken = Tokens::createRefreshToken($user);
-      $accessExpiresAt = Carbon::now()->setTimezone('Asia/Manila')->addHours(8);
+      $accessExpiresAt = Carbon::now('Asia/Manila')->addHours(8);
 
       // Prepare user data
       $userData = [
@@ -202,7 +214,7 @@ class AuthenticationController extends Controller
         $userData['school_code'] = $user->school_code;
         $userData['redirect_to'] = $redirectTo;
 
-        // ✅ TASK 3: Add SMS registration status to login response
+        // ✅ TASK 1: Add SMS registration status to login response
         $userData['sms_registered'] = $smsStatus['is_registered'];
         $userData['sms_credentials_exist'] = $smsStatus['has_credentials'];
 
@@ -250,6 +262,7 @@ class AuthenticationController extends Controller
       return $response;
 
     } catch (\Throwable $th) {
+      \Log::error('Login error: ' . $th->getMessage());
       return new JsonResponse([
         'success' => false,
         'error' => 'Cannot login: ' . $th->getMessage()
@@ -285,7 +298,7 @@ class AuthenticationController extends Controller
       return new JsonResponse([
         'success' => true,
         'access_token' => $newAccessToken,
-        'access_expires_at' => Carbon::now()->setTimezone('Asia/Manila')->addHours(8)->toDateTimeString()
+        'access_expires_at' => Carbon::now('Asia/Manila')->addHours(8)->toDateTimeString()
       ], 200);
 
     } catch (\Throwable $th) {

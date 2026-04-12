@@ -3,33 +3,40 @@
 namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
-use App\Models\Trademark;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\DB;
 
 class TrademarkController extends Controller
 {
   public function footer(Request $request): JsonResponse
   {
     try {
-      $company = Trademark::orderBy('id', 'desc')->first();
+      // Use the trademarks database connection directly
+      $company = DB::connection('trademarks')
+        ->table('companies')
+        ->orderBy('id', 'desc')
+        ->first();
 
       if (!$company) {
+        // Return default copyright notice if no data found
         return new JsonResponse([
-          'success' => false,
-          'error' => 'No company data found'
-        ], 404);
+          'success' => true,
+          'data' => [
+            'copyright_notice' => '© ' . date('Y') . ' TaparSoft Enterprise. All rights reserved.',
+          ],
+        ], 200);
       }
 
-      // Check if copyright_name already contains the full notice
-      $copyrightNotice = $company->copyright_name;
+      // Get the copyright text from the company record
+      $copyrightText = $company->copyright ?? 'TaparSoft Enterprise';
+      $year = date('Y');
 
-      // If it doesn't start with ©, format it properly
-      if (!str_starts_with($copyrightNotice, '©')) {
-        $year = $company->publication_date
-          ? $company->publication_date->format('Y')
-          : date('Y');
-        $copyrightNotice = '© ' . $year . ' ' . $copyrightNotice . '. All rights reserved.';
+      // Check if copyright already contains the full notice
+      if (!str_starts_with($copyrightText, '©')) {
+        $copyrightNotice = '© ' . $year . ' ' . $copyrightText . '. All rights reserved.';
+      } else {
+        $copyrightNotice = $copyrightText;
       }
 
       return new JsonResponse([
@@ -40,10 +47,15 @@ class TrademarkController extends Controller
       ], 200);
 
     } catch (\Throwable $th) {
+      \Log::error('Failed to fetch footer data: ' . $th->getMessage());
+
+      // Return default on error
       return new JsonResponse([
-        'success' => false,
-        'error' => $th->getMessage()
-      ], 500);
+        'success' => true,
+        'data' => [
+          'copyright_notice' => '© ' . date('Y') . ' TaparSoft Enterprise. All rights reserved.',
+        ],
+      ], 200);
     }
   }
 }

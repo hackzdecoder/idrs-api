@@ -445,18 +445,14 @@ class StudentController extends Controller
       }
 
       // ============================================================
-      // TASK 13: Create login credential in SMS users database
+      // TASK 13: Create OR UPDATE login credential in SMS users database
       // ============================================================
-      if (!$existingSmsUser) {
-        try {
-          $this->syncSmsUser($studentInfo, $validated);
-          $smsUserCreated = true;
-        } catch (\Exception $e) {
-          Log::error('TASK 13 FAILED (SMS User): ' . $e->getMessage());
-        }
-      } else {
-        Log::info("SMS User already exists with user_id: {$userId}. Skipping creation.");
+      // Always call syncSmsUser to handle both create and update
+      try {
+        $this->syncSmsUser($studentInfo, $validated);
         $smsUserCreated = true;
+      } catch (\Exception $e) {
+        Log::error('TASK 13 FAILED (SMS User): ' . $e->getMessage());
       }
 
       // ✅ REVISION 2: Update sms_app_credentials and sms_app_created_at
@@ -488,6 +484,7 @@ class StudentController extends Controller
       // ============================================================
       // TASK 14: Create student record in school-specific database
       // ============================================================
+      // Only create if user didn't exist before (to avoid duplicates)
       if (!$existingSmsUser) {
         try {
           $this->syncStudentRecord($studentInfo, $validated);
@@ -566,7 +563,7 @@ class StudentController extends Controller
 
   /**
    * TASK 13: Sync user to SMS users database
-   * Check existing before creating by user_id, username, AND email
+   * Check existing before creating - UPDATE if exists
    */
   private function syncSmsUser($studentInfo, $validated): void
   {
@@ -612,12 +609,19 @@ class StudentController extends Controller
         ->orWhere('email', $email)
         ->first();
 
+      // ✅ Only get password if provided
+      $newPassword = $validated['password'] ?? null;
+      $hashedPassword = $newPassword ? Hash::make($newPassword) : null;
+
       if (!$existingUser) {
+        // Create new user - password is required
+        $finalPassword = $newPassword ? $hashedPassword : Hash::make('Default@123');
+
         DB::connection('sms_users')->table('users')->insert([
           'user_id' => $userId,
           'username' => $username,
           'email' => $email,
-          'password' => Hash::make($validated['password'] ?? 'Default@123'),
+          'password' => $finalPassword,
           'fullname' => $fullname,
           'school_code' => $schoolCode,
           'account_status' => 'active',
@@ -629,12 +633,25 @@ class StudentController extends Controller
 
         Log::info("SMS User created: {$username} ({$userId}) with email: {$email}");
       } else {
-        Log::info("SMS User already exists. Skipping creation.", [
-          'user_id' => $userId,
-          'username' => $username,
-          'email' => $email,
-          'existing_id' => $existingUser->id
-        ]);
+        // ✅ UPDATE existing user - only update password if a new one was provided
+        $updateData = [
+          'fullname' => $fullname,
+          'school_code' => $schoolCode,
+          'assigned_admin_email' => $assignedAdminEmail,
+          'updated_at' => Carbon::now('Asia/Manila'),
+        ];
+
+        // Only update password if a new one was provided
+        if ($hashedPassword) {
+          $updateData['password'] = $hashedPassword;
+          Log::info("SMS User password updated for: {$username} ({$userId})");
+        } else {
+          Log::info("SMS User updated (password unchanged) for: {$username} ({$userId})");
+        }
+
+        DB::connection('sms_users')->table('users')
+          ->where('id', $existingUser->id)
+          ->update($updateData);
       }
     } catch (\Exception $e) {
       Log::error('Failed to sync SMS user: ' . $e->getMessage());
@@ -740,7 +757,11 @@ class StudentController extends Controller
       );
 
       $username = $studentInfo->emergency_contact_number;
+      // ✅ Use the password from validated input, NOT from database
       $password = $validated['password'] ?? 'Default@123';
+
+      // Log the password being sent (remove in production)
+      Log::info('Sending email with password for student: ' . $studentInfo->student_id);
 
       $emailData = [
         'name_to_appear_on_id' => $studentInfo->name_to_appear_on_id ?? $studentInfo->first_name . ' ' . $studentInfo->surname,
@@ -752,7 +773,7 @@ class StudentController extends Controller
         'lrn' => $studentInfo->lrn ?? 'Not provided',
         'esc_number' => $studentInfo->esc_number ?? 'Not provided',
         'username' => $username,
-        'password' => $password,
+        'password' => $password,  // This is the plain text password from form submission
       ];
 
       Mail::send('emails.parent-credentials', $emailData, function ($message) use ($parentEmail, $parentFullName) {
