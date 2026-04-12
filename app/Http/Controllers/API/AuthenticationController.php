@@ -172,20 +172,13 @@ class AuthenticationController extends Controller
         ], 403);
       }
 
-      // ✅ TASKS 3 & 4: Fix last_successful_login timestamp with proper timezone
-      // Use direct MySQL timezone conversion for Hostinger compatibility
-      if (app()->environment('production')) {
-        // Hostinger production - use CONVERT_TZ
-        DB::table('users')
-          ->where('id', $user->id)
-          ->update([
-            'last_successful_login' => DB::raw("CONVERT_TZ(NOW(), 'UTC', '+08:00')")
-          ]);
-      } else {
-        // Local development - use Carbon
-        $user->last_successful_login = Carbon::now('Asia/Manila');
-        $user->save();
-      }
+      // ✅ TASKS 3 & 4: Fix last_successful_login timestamp
+      $currentTimestamp = Carbon::now();  // Uses config/app.php timezone
+      DB::table('users')
+        ->where('id', $user->id)
+        ->update([
+          'last_successful_login' => $currentTimestamp
+        ]);
 
       RateLimiter::clear($key);
 
