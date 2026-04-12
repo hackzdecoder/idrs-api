@@ -360,9 +360,27 @@ class StudentController extends Controller
       }
 
       $dataToUpdate['id_info_status'] = 'approved';
-      $dataToUpdate['id_info_approval_date'] = Carbon::now('Asia/Manila');
+      // ✅ TASK 1: REMOVE from array - will update separately for Hostinger
+      // $dataToUpdate['id_info_approval_date'] = Carbon::now('Asia/Manila');
 
       $studentInfo->update($dataToUpdate);
+
+      // ✅ TASK 1: Update id_info_approval_date with Hostinger-compatible timezone
+      if (app()->environment('production')) {
+        DB::table('student_id_info')
+          ->where('student_id', $user->student_id)
+          ->where('school_code', $user->school_code)
+          ->update([
+            'id_info_approval_date' => DB::raw("CONVERT_TZ(NOW(), 'UTC', '+08:00')")
+          ]);
+      } else {
+        DB::table('student_id_info')
+          ->where('student_id', $user->student_id)
+          ->where('school_code', $user->school_code)
+          ->update([
+            'id_info_approval_date' => Carbon::now('Asia/Manila')
+          ]);
+      }
 
       // Update user record with required fields (IDRS users table)
       $userUpdates = [];
@@ -444,8 +462,26 @@ class StudentController extends Controller
       // ✅ REVISION 2: Update sms_app_credentials and sms_app_created_at
       if ($smsUserCreated) {
         $studentInfo->sms_app_credentials = 'yes';
-        $studentInfo->sms_app_created_at = Carbon::now('Asia/Manila');
         $studentInfo->save();
+
+        // ✅ TASK 2: Update sms_app_created_at with Hostinger-compatible timezone
+        if (app()->environment('production')) {
+          DB::table('student_id_info')
+            ->where('student_id', $user->student_id)
+            ->where('school_code', $user->school_code)
+            ->update([
+              'sms_app_created_at' => DB::raw("CONVERT_TZ(NOW(), 'UTC', '+08:00')")
+            ]);
+        } else {
+          DB::table('student_id_info')
+            ->where('student_id', $user->student_id)
+            ->where('school_code', $user->school_code)
+            ->update([
+              'sms_app_created_at' => Carbon::now('Asia/Manila')
+            ]);
+        }
+
+        $studentInfo->refresh();
         Log::info("Updated sms_app_credentials to 'yes' for student: {$studentInfo->student_id}");
       }
 

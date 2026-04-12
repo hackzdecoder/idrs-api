@@ -9,11 +9,63 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Http\JsonResponse;
 use Carbon\Carbon;
 
 class AuthenticationController extends Controller
 {
+  /**
+   * ✅ TASK 3: Check if mobile number and school code are already registered in SMS database
+   * 
+   * @param string $mobileNumber The emergency contact number
+   * @param string $schoolCode The school code
+   * @return array Registration status
+   */
+  private function checkSmsRegistrationStatus($mobileNumber, $schoolCode): array
+  {
+    try {
+      if (empty($mobileNumber) || empty($schoolCode)) {
+        return [
+          'is_registered' => false,
+          'has_credentials' => false
+        ];
+      }
+
+      // Step 1: Check if mobile number exists in SMS users database (users table)
+      $smsUser = DB::connection('sms_users')
+        ->table('users')
+        ->where('user_id', $mobileNumber)
+        ->orWhere('username', $mobileNumber)
+        ->first();
+
+      if (!$smsUser) {
+        return [
+          'is_registered' => false,
+          'has_credentials' => false
+        ];
+      }
+
+      // Step 2: Check student_id_info for matching school_code and sms_app_credentials = 'yes'
+      $studentInfo = StudentIdInfo::where('emergency_contact_number', $mobileNumber)
+        ->where('school_code', $schoolCode)
+        ->first();
+
+      $hasCredentials = $studentInfo && $studentInfo->sms_app_credentials === 'yes';
+
+      return [
+        'is_registered' => true,
+        'has_credentials' => $hasCredentials
+      ];
+    } catch (\Exception $e) {
+      \Log::error('Failed to check SMS registration status: ' . $e->getMessage());
+      return [
+        'is_registered' => false,
+        'has_credentials' => false
+      ];
+    }
+  }
+
   /**
    * Authenticate admin/super admin or student login (unified endpoint)
    */
@@ -45,6 +97,7 @@ class AuthenticationController extends Controller
       $user = null;
       $studentInfo = null;
       $redirectTo = null;
+      $smsStatus = ['is_registered' => false, 'has_credentials' => false]; // ✅ TASK 3: Initialize SMS status
 
       // Handle Admin Login
       if ($isAdminLogin) {
@@ -90,6 +143,18 @@ class AuthenticationController extends Controller
           ->where('school_code', $request->school_code)
           ->first();
 
+        // ✅ TASK 3: Check SMS registration status with mobile number AND school code
+        $smsStatus = $this->checkSmsRegistrationStatus($request->mobile_no, $request->school_code);
+
+        // Log the result for debugging
+        \Log::info('SMS Registration Check Result', [
+          'student_id' => $request->student_id,
+          'mobile_number' => $request->mobile_no,
+          'school_code' => $request->school_code,
+          'is_registered' => $smsStatus['is_registered'],
+          'has_credentials' => $smsStatus['has_credentials']
+        ]);
+
         // Check id_info_status to determine redirect
         if ($studentInfo && strtolower($studentInfo->id_info_status) === 'pending') {
           $redirectTo = '/profile'; // Redirect to profile page for pending approval
@@ -124,7 +189,7 @@ class AuthenticationController extends Controller
       $userData = [
         'id' => $user->id,
         'username' => $user->username,
-        'email' => $user->school_email ?? $user->email ?? null, // ✅ Use school_email
+        'email' => $user->school_email ?? $user->email ?? null,
         'account_name' => $user->account_name,
         'role' => $user->user_role,
         'account_status' => $user->account_status,
@@ -137,6 +202,10 @@ class AuthenticationController extends Controller
         $userData['school_code'] = $user->school_code;
         $userData['redirect_to'] = $redirectTo;
 
+        // ✅ TASK 3: Add SMS registration status to login response
+        $userData['sms_registered'] = $smsStatus['is_registered'];
+        $userData['sms_credentials_exist'] = $smsStatus['has_credentials'];
+
         if ($studentInfo) {
           $userData['student_info'] = [
             'first_name' => $studentInfo->first_name,
@@ -144,6 +213,7 @@ class AuthenticationController extends Controller
             'level' => $studentInfo->level,
             'section_course' => $studentInfo->section_course,
             'id_info_status' => $studentInfo->id_info_status,
+            'sms_app_credentials' => $studentInfo->sms_app_credentials,
           ];
         }
       }
@@ -281,7 +351,7 @@ class AuthenticationController extends Controller
         'user' => [
           'id' => $user->id,
           'username' => $user->username,
-          'email' => $user->school_email ?? null, // ✅ Use school_email
+          'email' => $user->school_email ?? null,
           'role' => $user->user_role,
           'account_status' => $user->account_status,
         ]
