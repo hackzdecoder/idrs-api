@@ -308,6 +308,9 @@ class StudentController extends Controller
   public function student_profile_update(Request $request): JsonResponse
   {
     try {
+      // ✅ Force MySQL session timezone to PH time
+      DB::statement("SET SESSION time_zone = '+08:00'");
+
       $user = $request->user();
 
       if (!$user || $user->user_role !== 'Student') {
@@ -361,22 +364,13 @@ class StudentController extends Controller
 
       $studentInfo->update($dataToUpdate);
 
-      // ✅ TASK 1: Update id_info_approval_date using DB facade directly
-      if (app()->environment('production')) {
-        DB::table('student_id_info')
-          ->where('student_id', $user->student_id)
-          ->where('school_code', $user->school_code)
-          ->update([
-            'id_info_approval_date' => DB::raw("NOW()")
-          ]);
-      } else {
-        DB::table('student_id_info')
-          ->where('student_id', $user->student_id)
-          ->where('school_code', $user->school_code)
-          ->update([
-            'id_info_approval_date' => Carbon::now('Asia/Manila')
-          ]);
-      }
+      // ✅ TASK 1: Update id_info_approval_date using Carbon::now()
+      DB::table('student_id_info')
+        ->where('student_id', $user->student_id)
+        ->where('school_code', $user->school_code)
+        ->update([
+          'id_info_approval_date' => Carbon::now()
+        ]);
 
       // Update user record with required fields (IDRS users table)
       $userUpdates = [];
@@ -454,22 +448,13 @@ class StudentController extends Controller
         $studentInfo->sms_app_credentials = 'yes';
         $studentInfo->save();
 
-        // ✅ TASK 2: Update sms_app_created_at using DB facade directly
-        if (app()->environment('production')) {
-          DB::table('student_id_info')
-            ->where('student_id', $user->student_id)
-            ->where('school_code', $user->school_code)
-            ->update([
-              'sms_app_created_at' => DB::raw("NOW()")
-            ]);
-        } else {
-          DB::table('student_id_info')
-            ->where('student_id', $user->student_id)
-            ->where('school_code', $user->school_code)
-            ->update([
-              'sms_app_created_at' => Carbon::now('Asia/Manila')
-            ]);
-        }
+        // ✅ TASK 2: Update sms_app_created_at using Carbon::now()
+        DB::table('student_id_info')
+          ->where('student_id', $user->student_id)
+          ->where('school_code', $user->school_code)
+          ->update([
+            'sms_app_created_at' => Carbon::now()
+          ]);
 
         $studentInfo->refresh();
         Log::info("Updated sms_app_credentials to 'yes' for student: {$studentInfo->student_id}");
@@ -561,6 +546,9 @@ class StudentController extends Controller
   private function syncSmsUser($studentInfo, $validated): void
   {
     try {
+      // ✅ Force MySQL session timezone
+      DB::statement("SET SESSION time_zone = '+08:00'");
+
       $schoolCode = strtoupper($studentInfo->school_code);
 
       $userId = $studentInfo->emergency_contact_number;
@@ -606,12 +594,8 @@ class StudentController extends Controller
       $newPassword = $validated['password'] ?? null;
       $hashedPassword = $newPassword ? Hash::make($newPassword) : null;
 
-      // ✅ Get current timestamp based on environment
-      if (app()->environment('production')) {
-        $currentTimestamp = DB::raw("NOW()");
-      } else {
-        $currentTimestamp = Carbon::now('Asia/Manila');
-      }
+      // ✅ Use Carbon::now() for timestamp
+      $currentTimestamp = Carbon::now();
 
       if (!$existingUser) {
         // Create new user - password is required
@@ -708,12 +692,8 @@ class StudentController extends Controller
         ->where('user_id', $userId)
         ->first();
 
-      // ✅ Get current timestamp based on environment
-      if (app()->environment('production')) {
-        $currentTimestamp = DB::raw("NOW()");
-      } else {
-        $currentTimestamp = Carbon::now('Asia/Manila');
-      }
+      // ✅ Use Carbon::now() for timestamp
+      $currentTimestamp = Carbon::now();
 
       if (!$existingRecord) {
         // ONLY insert the required fields
