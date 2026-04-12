@@ -57,7 +57,7 @@ class StudentController extends Controller
         ], 404);
       }
 
-      // ✅ REVISION 3: Check if SMS credentials already exist
+      // Check if SMS credentials already exist
       $smsCredentialsExist = $studentInfo->sms_app_credentials === 'yes';
 
       $fullName = trim(
@@ -104,7 +104,7 @@ class StudentController extends Controller
           'created_at' => $studentInfo->created_at,
           'sms_app_credentials' => $studentInfo->sms_app_credentials,
           'sms_app_created_at' => $studentInfo->sms_app_created_at,
-          'sms_credentials_exist' => $smsCredentialsExist, // ✅ REVISION 3: Add flag
+          'sms_credentials_exist' => $smsCredentialsExist,
         ]
       ], 200);
 
@@ -225,7 +225,6 @@ class StudentController extends Controller
         ->byIdReprintStatus($request->id_reprint_status)
         ->byAccountStatus($request->account_status)
         ->byDateRange($request->date_from, $request->date_to)
-        // ✅ NEW: Approval date range filters
         ->byIdInfoApprovalDateRange($request->id_info_approval_date_from, $request->id_info_approval_date_to)
         ->byClassDetailsApprovalDateRange($request->class_details_approval_date_from, $request->class_details_approval_date_to)
         ->byEmail($request->email)
@@ -275,7 +274,6 @@ class StudentController extends Controller
             : null,
           'created_at' => $student->created_at,
           'name_to_appear_on_id' => $student->name_to_appear_on_id,
-          // ✅ ADDED MISSING FIELDS FOR TASKS 5, 6, 7
           'nick_name' => $student->nick_name,
           'birth_date' => $student->birth_date,
           'gender' => $student->gender,
@@ -445,7 +443,6 @@ class StudentController extends Controller
       // ============================================================
       // TASK 13: Create OR UPDATE login credential in SMS users database
       // ============================================================
-      // Always call syncSmsUser to handle both create and update
       try {
         $this->syncSmsUser($studentInfo, $validated);
         $smsUserCreated = true;
@@ -481,7 +478,6 @@ class StudentController extends Controller
       // ============================================================
       // TASK 14: Create student record in school-specific database
       // ============================================================
-      // Only create if user didn't exist before (to avoid duplicates)
       if (!$existingSmsUser) {
         try {
           $this->syncStudentRecord($studentInfo, $validated);
@@ -606,9 +602,16 @@ class StudentController extends Controller
         ->orWhere('email', $email)
         ->first();
 
-      // ✅ Only get password if provided
+      // Only get password if provided
       $newPassword = $validated['password'] ?? null;
       $hashedPassword = $newPassword ? Hash::make($newPassword) : null;
+
+      // ✅ Get current timestamp based on environment
+      if (app()->environment('production')) {
+        $currentTimestamp = DB::raw("NOW()");
+      } else {
+        $currentTimestamp = Carbon::now('Asia/Manila');
+      }
 
       if (!$existingUser) {
         // Create new user - password is required
@@ -624,18 +627,18 @@ class StudentController extends Controller
           'account_status' => 'active',
           'gs_access_status' => 'pending',
           'assigned_admin_email' => $assignedAdminEmail,
-          'created_at' => Carbon::now('Asia/Manila'),
-          'updated_at' => Carbon::now('Asia/Manila'),
+          'created_at' => $currentTimestamp,
+          'updated_at' => $currentTimestamp,
         ]);
 
         Log::info("SMS User created: {$username} ({$userId}) with email: {$email}");
       } else {
-        // ✅ UPDATE existing user - only update password if a new one was provided
+        // UPDATE existing user - only update password if a new one was provided
         $updateData = [
           'fullname' => $fullname,
           'school_code' => $schoolCode,
           'assigned_admin_email' => $assignedAdminEmail,
-          'updated_at' => Carbon::now('Asia/Manila'),
+          'updated_at' => $currentTimestamp,
         ];
 
         // Only update password if a new one was provided
@@ -705,6 +708,13 @@ class StudentController extends Controller
         ->where('user_id', $userId)
         ->first();
 
+      // ✅ Get current timestamp based on environment
+      if (app()->environment('production')) {
+        $currentTimestamp = DB::raw("NOW()");
+      } else {
+        $currentTimestamp = Carbon::now('Asia/Manila');
+      }
+
       if (!$existingRecord) {
         // ONLY insert the required fields
         DB::connection($databaseName)->table('student_records')->insert([
@@ -712,8 +722,8 @@ class StudentController extends Controller
           'fullname' => $fullname,
           'nickname' => $nickname,
           'school_name' => $schoolName,
-          'created_at' => Carbon::now('Asia/Manila'),
-          'updated_at' => Carbon::now('Asia/Manila'),
+          'created_at' => $currentTimestamp,
+          'updated_at' => $currentTimestamp,
         ]);
 
         Log::info("Student record created in {$databaseName} for user: {$userId}");
@@ -725,7 +735,7 @@ class StudentController extends Controller
             'fullname' => $fullname,
             'nickname' => $nickname,
             'school_name' => $schoolName,
-            'updated_at' => Carbon::now('Asia/Manila'),
+            'updated_at' => $currentTimestamp,
           ]);
 
         Log::info("Student record updated in {$databaseName} for user: {$userId}");
@@ -754,10 +764,8 @@ class StudentController extends Controller
       );
 
       $username = $studentInfo->emergency_contact_number;
-      // ✅ Use the password from validated input, NOT from database
       $password = $validated['password'] ?? 'Default@123';
 
-      // Log the password being sent (remove in production)
       Log::info('Sending email with password for student: ' . $studentInfo->student_id);
 
       $emailData = [
@@ -770,7 +778,7 @@ class StudentController extends Controller
         'lrn' => $studentInfo->lrn ?? 'Not provided',
         'esc_number' => $studentInfo->esc_number ?? 'Not provided',
         'username' => $username,
-        'password' => $password,  // This is the plain text password from form submission
+        'password' => $password,
       ];
 
       Mail::send('emails.parent-credentials', $emailData, function ($message) use ($parentEmail, $parentFullName) {
