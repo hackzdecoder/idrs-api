@@ -203,6 +203,28 @@ class StudentIdInfo extends Model
   }
 
   /**
+   * Scope a query to filter by level.
+   */
+  public function scopeByLevel(Builder $query, ?string $level): Builder
+  {
+    if ($level) {
+      return $query->where('level', $level);
+    }
+    return $query;
+  }
+
+  /**
+   * Scope a query to filter by section/course.
+   */
+  public function scopeBySectionCourse(Builder $query, ?string $sectionCourse): Builder
+  {
+    if ($sectionCourse) {
+      return $query->where('section_course', $sectionCourse);
+    }
+    return $query;
+  }
+
+  /**
    * Scope a query to filter by account status (from user relationship).
    */
   public function scopeByAccountStatus(Builder $query, ?string $status): Builder
@@ -216,7 +238,7 @@ class StudentIdInfo extends Model
   }
 
   /**
-   * Scope a query to filter by date range.
+   * Scope a query to filter by enrollment date range (created_at).
    */
   public function scopeByDateRange(Builder $query, ?string $dateFrom, ?string $dateTo): Builder
   {
@@ -225,6 +247,42 @@ class StudentIdInfo extends Model
     }
     if ($dateTo) {
       $query->whereDate('created_at', '<=', $dateTo);
+    }
+    return $query;
+  }
+
+  /**
+   * ✅ NEW: Scope a query to filter by ID info approval date range
+   */
+  public function scopeByIdInfoApprovalDateRange(Builder $query, ?string $dateFrom, ?string $dateTo): Builder
+  {
+    if ($dateFrom && $dateTo) {
+      return $query->whereDate('id_info_approval_date', '>=', $dateFrom)
+        ->whereDate('id_info_approval_date', '<=', $dateTo);
+    }
+    if ($dateFrom) {
+      return $query->whereDate('id_info_approval_date', '>=', $dateFrom);
+    }
+    if ($dateTo) {
+      return $query->whereDate('id_info_approval_date', '<=', $dateTo);
+    }
+    return $query;
+  }
+
+  /**
+   * ✅ NEW: Scope a query to filter by class details approval date range
+   */
+  public function scopeByClassDetailsApprovalDateRange(Builder $query, ?string $dateFrom, ?string $dateTo): Builder
+  {
+    if ($dateFrom && $dateTo) {
+      return $query->whereDate('class_details_approval_date', '>=', $dateFrom)
+        ->whereDate('class_details_approval_date', '<=', $dateTo);
+    }
+    if ($dateFrom) {
+      return $query->whereDate('class_details_approval_date', '>=', $dateFrom);
+    }
+    if ($dateTo) {
+      return $query->whereDate('class_details_approval_date', '<=', $dateTo);
     }
     return $query;
   }

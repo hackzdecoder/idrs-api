@@ -217,12 +217,17 @@ class StudentController extends Controller
         ->bySchoolCode($request->school_code)
         ->byStudentId($request->student_id)
         ->byStudentType($request->student_type)
+        ->byLevel($request->level)
+        ->bySectionCourse($request->section_course)
         ->byIdInfoStatus($request->id_info_status)
         ->byClassDetailsStatus($request->class_details_status)
         ->byIdPrintStatus($request->id_print_status)
         ->byIdReprintStatus($request->id_reprint_status)
         ->byAccountStatus($request->account_status)
         ->byDateRange($request->date_from, $request->date_to)
+        // ✅ NEW: Approval date range filters
+        ->byIdInfoApprovalDateRange($request->id_info_approval_date_from, $request->id_info_approval_date_to)
+        ->byClassDetailsApprovalDateRange($request->class_details_approval_date_from, $request->class_details_approval_date_to)
         ->byEmail($request->email)
         ->latest();
 
@@ -270,6 +275,18 @@ class StudentController extends Controller
             : null,
           'created_at' => $student->created_at,
           'name_to_appear_on_id' => $student->name_to_appear_on_id,
+          // ✅ ADDED MISSING FIELDS FOR TASKS 5, 6, 7
+          'nick_name' => $student->nick_name,
+          'birth_date' => $student->birth_date,
+          'gender' => $student->gender,
+          'esc_voucher_recipient' => $student->esc_voucher_recipient,
+          'esc_number' => $student->esc_number,
+          'id_info_approval_date' => $student->id_info_approval_date,
+          'class_details_approval_date' => $student->class_details_approval_date,
+          'id_print_date' => $student->id_print_date,
+          'id_reprint_date' => $student->id_reprint_date,
+          'sms_app_credentials' => $student->sms_app_credentials,
+          'sms_app_created_at' => $student->sms_app_created_at,
         ];
       });
 
@@ -384,6 +401,7 @@ class StudentController extends Controller
       // CHECK IF USER ALREADY EXISTS IN SMS DATABASE
       // ============================================================
       $userId = $studentInfo->emergency_contact_number;
+      $email = $studentInfo->parent_email;
       $existingSmsUser = null;
       $smsUserCreated = false;
 
@@ -392,10 +410,20 @@ class StudentController extends Controller
           $existingSmsUser = DB::connection('sms_users')
             ->table('users')
             ->where('user_id', $userId)
+            ->orWhere('username', $userId)
+            ->orWhere('email', $email)
             ->first();
+
+          Log::info('SMS User check', [
+            'user_id' => $userId,
+            'email' => $email,
+            'found' => $existingSmsUser ? 'Yes' : 'No'
+          ]);
         } catch (\Exception $e) {
           Log::error('Failed to check existing SMS user: ' . $e->getMessage());
         }
+      } else {
+        Log::warning("No emergency contact number for student: {$studentInfo->student_id}");
       }
 
       // ============================================================
@@ -502,7 +530,7 @@ class StudentController extends Controller
 
   /**
    * TASK 13: Sync user to SMS users database
-   * Check existing before creating
+   * Check existing before creating by user_id, username, AND email
    */
   private function syncSmsUser($studentInfo, $validated): void
   {
@@ -511,9 +539,15 @@ class StudentController extends Controller
 
       $userId = $studentInfo->emergency_contact_number;
       $username = $studentInfo->emergency_contact_number;
+      $email = $studentInfo->parent_email;
 
       if (empty($userId)) {
         Log::warning("No emergency contact number for student: {$studentInfo->student_id}");
+        return;
+      }
+
+      if (empty($email)) {
+        Log::warning("No parent email for student: {$studentInfo->student_id}");
         return;
       }
 
@@ -526,37 +560,49 @@ class StudentController extends Controller
       }
       $fullname = trim($fullname, ', ');
 
+      // If fullname is empty, use a fallback
+      if (empty($fullname)) {
+        $fullname = $studentInfo->first_name . ' ' . $studentInfo->surname;
+      }
+
       // Get assigned admin email from school_id table
       $assignedAdminEmail = SchoolId::getEmailByCode($schoolCode);
 
-      // CHECK IF USER ALREADY EXISTS (Requirement 5)
+      // CHECK IF USER ALREADY EXISTS by user_id, username, OR email
       $existingUser = DB::connection('sms_users')
         ->table('users')
         ->where('user_id', $userId)
         ->orWhere('username', $username)
+        ->orWhere('email', $email)
         ->first();
 
       if (!$existingUser) {
         DB::connection('sms_users')->table('users')->insert([
           'user_id' => $userId,
           'username' => $username,
-          'email' => $studentInfo->parent_email,
+          'email' => $email,
           'password' => Hash::make($validated['password'] ?? 'Default@123'),
           'fullname' => $fullname,
           'school_code' => $schoolCode,
           'account_status' => 'active',
-          'gs_access_status' => 'pending',  // Requirement 3c
-          'assigned_admin_email' => $assignedAdminEmail,  // Requirement 3d
+          'gs_access_status' => 'pending',
+          'assigned_admin_email' => $assignedAdminEmail,
           'created_at' => Carbon::now('Asia/Manila'),
           'updated_at' => Carbon::now('Asia/Manila'),
         ]);
 
-        Log::info("SMS User created: {$username} ({$userId})");
+        Log::info("SMS User created: {$username} ({$userId}) with email: {$email}");
       } else {
-        Log::info("SMS User already exists with user_id: {$userId}. Skipping creation.");
+        Log::info("SMS User already exists. Skipping creation.", [
+          'user_id' => $userId,
+          'username' => $username,
+          'email' => $email,
+          'existing_id' => $existingUser->id
+        ]);
       }
     } catch (\Exception $e) {
       Log::error('Failed to sync SMS user: ' . $e->getMessage());
+      Log::error('Stack trace: ' . $e->getTraceAsString());
     }
   }
 
