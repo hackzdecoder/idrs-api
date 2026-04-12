@@ -360,18 +360,16 @@ class StudentController extends Controller
       }
 
       $dataToUpdate['id_info_status'] = 'approved';
-      // ✅ TASK 1: REMOVE from array - will update separately for Hostinger
-      // $dataToUpdate['id_info_approval_date'] = Carbon::now('Asia/Manila');
 
       $studentInfo->update($dataToUpdate);
 
-      // ✅ TASK 1: Update id_info_approval_date with Hostinger-compatible timezone
+      // ✅ TASK 1: Update id_info_approval_date using DB facade directly
       if (app()->environment('production')) {
         DB::table('student_id_info')
           ->where('student_id', $user->student_id)
           ->where('school_code', $user->school_code)
           ->update([
-            'id_info_approval_date' => DB::raw("CONVERT_TZ(NOW(), 'UTC', '+08:00')")
+            'id_info_approval_date' => DB::raw("NOW()")
           ]);
       } else {
         DB::table('student_id_info')
@@ -455,18 +453,17 @@ class StudentController extends Controller
         Log::error('TASK 13 FAILED (SMS User): ' . $e->getMessage());
       }
 
-      // ✅ REVISION 2: Update sms_app_credentials and sms_app_created_at
       if ($smsUserCreated) {
         $studentInfo->sms_app_credentials = 'yes';
         $studentInfo->save();
 
-        // ✅ TASK 2: Update sms_app_created_at with Hostinger-compatible timezone
+        // ✅ TASK 2: Update sms_app_created_at using DB facade directly
         if (app()->environment('production')) {
           DB::table('student_id_info')
             ->where('student_id', $user->student_id)
             ->where('school_code', $user->school_code)
             ->update([
-              'sms_app_created_at' => DB::raw("CONVERT_TZ(NOW(), 'UTC', '+08:00')")
+              'sms_app_created_at' => DB::raw("NOW()")
             ]);
         } else {
           DB::table('student_id_info')
