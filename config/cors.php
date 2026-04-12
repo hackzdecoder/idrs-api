@@ -22,7 +22,7 @@ return [
   'allowed_origins' => [
     'http://localhost:5005',
     'https://idrs.schoolmanagerph.com',
-    'https://idrs-staging-api.schoolmanagerph.com',
+    'https://idrs-staging.schoolmanagerph.com',
   ],
 
   'allowed_origins_patterns' => [],
