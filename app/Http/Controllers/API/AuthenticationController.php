@@ -32,12 +32,20 @@ class AuthenticationController extends Controller
         ];
       }
 
-      // Step 1: Check if mobile number exists in SMS users database (users table)
+      // Check if mobile number exists in SMS users database for this specific school
       $smsUser = DB::connection('sms_users')
         ->table('users')
         ->where('user_id', $mobileNumber)
-        ->orWhere('username', $mobileNumber)
+        ->where('school_code', $schoolCode)
         ->first();
+
+      if (!$smsUser) {
+        $smsUser = DB::connection('sms_users')
+          ->table('users')
+          ->where('username', $mobileNumber)
+          ->where('school_code', $schoolCode)
+          ->first();
+      }
 
       if (!$smsUser) {
         return [
@@ -46,7 +54,7 @@ class AuthenticationController extends Controller
         ];
       }
 
-      // Step 2: Check student_id_info for matching school_code and sms_app_credentials = 'yes'
+      // Check student_id_info for matching school_code and sms_app_credentials = 'yes'
       $studentInfo = StudentIdInfo::where('emergency_contact_number', $mobileNumber)
         ->where('school_code', $schoolCode)
         ->first();

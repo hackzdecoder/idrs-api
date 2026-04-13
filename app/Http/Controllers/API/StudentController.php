@@ -308,7 +308,7 @@ class StudentController extends Controller
   public function student_profile_update(Request $request): JsonResponse
   {
     try {
-      // ✅ Force MySQL session timezone to PH time
+      // Force MySQL session timezone to PH time
       DB::statement("SET SESSION time_zone = '+08:00'");
 
       $user = $request->user();
@@ -364,12 +364,12 @@ class StudentController extends Controller
 
       $studentInfo->update($dataToUpdate);
 
-      // ✅ TASK 1: Update id_info_approval_date using Carbon::now()
+      // Update id_info_approval_date
       DB::table('student_id_info')
         ->where('student_id', $user->student_id)
         ->where('school_code', $user->school_code)
         ->update([
-          'id_info_approval_date' => Carbon::now()
+          'id_info_approval_date' => DB::raw("CONVERT_TZ(NOW(), '+00:00', '+08:00')")
         ]);
 
       // Update user record with required fields (IDRS users table)
@@ -406,25 +406,36 @@ class StudentController extends Controller
       }
 
       // ============================================================
-      // CHECK IF USER ALREADY EXISTS IN SMS DATABASE
+      // CHECK IF USER ALREADY EXISTS IN SMS DATABASE FOR THIS SCHOOL
       // ============================================================
       $userId = $studentInfo->emergency_contact_number;
       $email = $studentInfo->parent_email;
+      $schoolCode = $studentInfo->school_code;
       $existingSmsUser = null;
       $smsUserCreated = false;
 
       if (!empty($userId)) {
         try {
+          // Check by user_id AND school_code
           $existingSmsUser = DB::connection('sms_users')
             ->table('users')
             ->where('user_id', $userId)
-            ->orWhere('username', $userId)
-            ->orWhere('email', $email)
+            ->where('school_code', $schoolCode)
             ->first();
+
+          if (!$existingSmsUser) {
+            // Check by username AND school_code
+            $existingSmsUser = DB::connection('sms_users')
+              ->table('users')
+              ->where('username', $userId)
+              ->where('school_code', $schoolCode)
+              ->first();
+          }
 
           Log::info('SMS User check', [
             'user_id' => $userId,
             'email' => $email,
+            'school_code' => $schoolCode,
             'found' => $existingSmsUser ? 'Yes' : 'No'
           ]);
         } catch (\Exception $e) {
@@ -448,12 +459,12 @@ class StudentController extends Controller
         $studentInfo->sms_app_credentials = 'yes';
         $studentInfo->save();
 
-        // ✅ TASK 2: Update sms_app_created_at using Carbon::now()
+        // Update sms_app_created_at
         DB::table('student_id_info')
           ->where('student_id', $user->student_id)
           ->where('school_code', $user->school_code)
           ->update([
-            'sms_app_created_at' => Carbon::now()
+            'sms_app_created_at' => DB::raw("CONVERT_TZ(NOW(), '+00:00', '+08:00')")
           ]);
 
         $studentInfo->refresh();
@@ -463,14 +474,10 @@ class StudentController extends Controller
       // ============================================================
       // TASK 14: Create student record in school-specific database
       // ============================================================
-      if (!$existingSmsUser) {
-        try {
-          $this->syncStudentRecord($studentInfo, $validated);
-        } catch (\Exception $e) {
-          Log::error('TASK 14 FAILED (Student Record): ' . $e->getMessage());
-        }
-      } else {
-        Log::info("Skipping student record creation because SMS user already exists.");
+      try {
+        $this->syncStudentRecord($studentInfo, $validated);
+      } catch (\Exception $e) {
+        Log::error('TASK 14 FAILED (Student Record): ' . $e->getMessage());
       }
 
       // ============================================================
@@ -541,12 +548,12 @@ class StudentController extends Controller
 
   /**
    * TASK 13: Sync user to SMS users database
-   * Check existing before creating - UPDATE if exists
+   * Creates new record for each unique (mobile_number + school_code) combination
    */
   private function syncSmsUser($studentInfo, $validated): void
   {
     try {
-      // ✅ Force MySQL session timezone
+      // Force MySQL session timezone
       DB::statement("SET SESSION time_zone = '+08:00'");
 
       $schoolCode = strtoupper($studentInfo->school_code);
@@ -582,23 +589,30 @@ class StudentController extends Controller
       // Get assigned admin email from school_id table
       $assignedAdminEmail = SchoolId::getEmailByCode($schoolCode);
 
-      // CHECK IF USER ALREADY EXISTS by user_id, username, OR email
+      // Check if user exists for this specific school code
       $existingUser = DB::connection('sms_users')
         ->table('users')
         ->where('user_id', $userId)
-        ->orWhere('username', $username)
-        ->orWhere('email', $email)
+        ->where('school_code', $schoolCode)
         ->first();
+
+      if (!$existingUser) {
+        $existingUser = DB::connection('sms_users')
+          ->table('users')
+          ->where('username', $username)
+          ->where('school_code', $schoolCode)
+          ->first();
+      }
+
+      // Get timestamp
+      $currentTimestamp = DB::raw("CONVERT_TZ(NOW(), '+00:00', '+08:00')");
 
       // Only get password if provided
       $newPassword = $validated['password'] ?? null;
       $hashedPassword = $newPassword ? Hash::make($newPassword) : null;
 
-      // ✅ Use Carbon::now() for timestamp
-      $currentTimestamp = Carbon::now();
-
       if (!$existingUser) {
-        // Create new user - password is required
+        // Create new user for this school
         $finalPassword = $newPassword ? $hashedPassword : Hash::make('Default@123');
 
         DB::connection('sms_users')->table('users')->insert([
@@ -615,22 +629,21 @@ class StudentController extends Controller
           'updated_at' => $currentTimestamp,
         ]);
 
-        Log::info("SMS User created: {$username} ({$userId}) with email: {$email}");
+        Log::info("SMS User created for school {$schoolCode}: {$username} ({$userId})");
       } else {
-        // UPDATE existing user - only update password if a new one was provided
+        // Update existing user for this school
         $updateData = [
           'fullname' => $fullname,
-          'school_code' => $schoolCode,
+          'email' => $email,
           'assigned_admin_email' => $assignedAdminEmail,
           'updated_at' => $currentTimestamp,
         ];
 
-        // Only update password if a new one was provided
         if ($hashedPassword) {
           $updateData['password'] = $hashedPassword;
-          Log::info("SMS User password updated for: {$username} ({$userId})");
+          Log::info("SMS User password updated for school {$schoolCode}: {$username} ({$userId})");
         } else {
-          Log::info("SMS User updated (password unchanged) for: {$username} ({$userId})");
+          Log::info("SMS User exists for school {$schoolCode} (password unchanged): {$username} ({$userId})");
         }
 
         DB::connection('sms_users')->table('users')
@@ -645,7 +658,7 @@ class StudentController extends Controller
 
   /**
    * TASK 14: Sync student record to school-specific database
-   * ONLY insert: user_id, fullname, nickname, school_name, created_at, updated_at
+   * Creates new record for each school database
    */
   private function syncStudentRecord($studentInfo, $validated): void
   {
@@ -686,17 +699,17 @@ class StudentController extends Controller
         return;
       }
 
-      // Check if record already exists
+      // Check if record already exists for this school
       $existingRecord = DB::connection($databaseName)
         ->table('student_records')
         ->where('user_id', $userId)
         ->first();
 
-      // ✅ Use Carbon::now() for timestamp
-      $currentTimestamp = Carbon::now();
+      // Get timestamp
+      $currentTimestamp = DB::raw("CONVERT_TZ(NOW(), '+00:00', '+08:00')");
 
       if (!$existingRecord) {
-        // ONLY insert the required fields
+        // Create new record for this school
         DB::connection($databaseName)->table('student_records')->insert([
           'user_id' => $userId,
           'fullname' => $fullname,
@@ -708,7 +721,7 @@ class StudentController extends Controller
 
         Log::info("Student record created in {$databaseName} for user: {$userId}");
       } else {
-        // ONLY update the required fields
+        // Update existing record for this school
         DB::connection($databaseName)->table('student_records')
           ->where('user_id', $userId)
           ->update([
