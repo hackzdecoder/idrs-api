@@ -180,13 +180,21 @@ class AuthenticationController extends Controller
         ], 403);
       }
 
-      // ✅ TASKS 3 & 4: Fix last_successful_login timestamp
-      $currentTimestamp = Carbon::now();  // Uses config/app.php timezone
+      // ✅ TASKS 3 & 4: Fix last_successful_login timestamp (matching working pattern)
+      $currentTimestamp = Carbon::now();
       DB::table('users')
         ->where('id', $user->id)
         ->update([
           'last_successful_login' => $currentTimestamp
         ]);
+
+      \Log::info('Timestamp Debug:', [
+        'carbon_now' => Carbon::now()->toDateTimeString(),
+        'carbon_asia' => Carbon::now('Asia/Manila')->toDateTimeString(),
+        'php_timezone' => date_default_timezone_get(),
+        'config_timezone' => config('app.timezone'),
+        'timestamp_saved' => $currentTimestamp
+      ]);
 
       RateLimiter::clear($key);
 
