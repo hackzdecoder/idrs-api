@@ -118,6 +118,63 @@ class StudentController extends Controller
   }
 
   /**
+   * ✅ NEW: Get existing parent data for a student with SMS credentials
+   * This pre-fills the parent fields when a student already has SMS credentials
+   */
+  public function getExistingParentData(Request $request): JsonResponse
+  {
+    try {
+      $user = $request->user();
+
+      if (!$user || $user->user_role !== 'Student') {
+        return new JsonResponse([
+          'success' => false,
+          'error' => 'Unauthorized'
+        ], 401);
+      }
+
+      $emergencyContactNumber = $request->query('emergency_contact_number');
+      $schoolCode = $request->query('school_code');
+
+      if (empty($emergencyContactNumber) || empty($schoolCode)) {
+        return new JsonResponse([
+          'success' => false,
+          'error' => 'Missing required parameters'
+        ], 400);
+      }
+
+      // Find existing record with matching emergency_contact_number, school_code, and sms_app_credentials = 'yes'
+      $studentInfo = StudentIdInfo::where('emergency_contact_number', $emergencyContactNumber)
+        ->where('school_code', $schoolCode)
+        ->where('sms_app_credentials', 'yes')
+        ->first();
+
+      if (!$studentInfo) {
+        return new JsonResponse([
+          'success' => false,
+          'error' => 'No existing record found'
+        ], 404);
+      }
+
+      return new JsonResponse([
+        'success' => true,
+        'data' => [
+          'parent_first_name' => $studentInfo->parent_first_name ?? '',
+          'parent_surname' => $studentInfo->parent_surname ?? '',
+          'parent_email' => $studentInfo->parent_email ?? '',
+        ]
+      ], 200);
+
+    } catch (\Throwable $th) {
+      Log::error('Failed to fetch existing parent data: ' . $th->getMessage());
+      return new JsonResponse([
+        'success' => false,
+        'error' => 'Failed to fetch existing parent data'
+      ], 500);
+    }
+  }
+
+  /**
    * Get student information list (for authenticated student)
    */
   public function student_information_lists(Request $request): JsonResponse
@@ -361,7 +418,7 @@ class StudentController extends Controller
 
       $studentInfo->update($dataToUpdate);
 
-      // ✅ Get correct PH time (add 12 hours for server offset)
+      // Get current timestamp (working correctly)
       $currentTimestamp = Carbon::now();
 
       // Update id_info_approval_date
@@ -459,7 +516,7 @@ class StudentController extends Controller
         $studentInfo->sms_app_credentials = 'yes';
         $studentInfo->save();
 
-        // ✅ Update sms_app_created_at with same timestamp
+        // Update sms_app_created_at with same timestamp
         DB::table('student_id_info')
           ->where('student_id', $user->student_id)
           ->where('school_code', $user->school_code)
@@ -601,7 +658,7 @@ class StudentController extends Controller
           ->first();
       }
 
-      // ✅ Get correct PH time
+      // Get current timestamp (working correctly)
       $currentTimestamp = Carbon::now();
 
       // Only get password if provided
@@ -702,7 +759,7 @@ class StudentController extends Controller
         ->where('user_id', $userId)
         ->first();
 
-      // ✅ Get correct PH time (add 12 hours for server offset)
+      // Get current timestamp (working correctly)
       $currentTimestamp = Carbon::now();
 
       if (!$existingRecord) {
@@ -737,6 +794,7 @@ class StudentController extends Controller
 
   /**
    * TASK 15: Send email to parent/guardian
+   * For existing users (resubmissions), show "your 1st nominated password" instead of actual password
    */
   private function sendParentEmail($studentInfo, $validated): void
   {
@@ -754,9 +812,19 @@ class StudentController extends Controller
       );
 
       $username = $studentInfo->emergency_contact_number;
-      $password = $validated['password'] ?? 'Default@123';
 
-      Log::info('Sending email with password for student: ' . $studentInfo->student_id);
+      // Check if this is an existing user (resubmission)
+      $isExistingUser = $studentInfo->sms_app_credentials === 'yes';
+
+      if ($isExistingUser) {
+        // For existing users, show "your 1st nominated password" instead of the actual password
+        $password = 'your 1st nominated password';
+        Log::info('Sending email for existing user (resubmission): ' . $studentInfo->student_id);
+      } else {
+        // For new users, show the actual password they submitted
+        $password = $validated['password'] ?? 'Default@123';
+        Log::info('Sending email for new user: ' . $studentInfo->student_id);
+      }
 
       $emailData = [
         'name_to_appear_on_id' => $studentInfo->name_to_appear_on_id ?? $studentInfo->first_name . ' ' . $studentInfo->surname,
