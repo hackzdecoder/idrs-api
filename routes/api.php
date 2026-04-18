@@ -66,6 +66,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/profile', [StudentController::class, 'student_profile']);
     Route::get('/information/list', [StudentController::class, 'student_information_lists']);
     Route::post('/update/profile', [StudentController::class, 'student_profile_update']);
+    Route::get('/existing-parent-data', [StudentController::class, 'getExistingParentData']);
   });
 
   Route::post('/logout', [AuthenticationController::class, 'logout']);

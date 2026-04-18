@@ -57,7 +57,7 @@ class StudentController extends Controller
         ], 404);
       }
 
-      // ✅ REVISION 3: Check if SMS credentials already exist
+      // Check if SMS credentials already exist
       $smsCredentialsExist = $studentInfo->sms_app_credentials === 'yes';
 
       $fullName = trim(
@@ -104,7 +104,7 @@ class StudentController extends Controller
           'created_at' => $studentInfo->created_at,
           'sms_app_credentials' => $studentInfo->sms_app_credentials,
           'sms_app_created_at' => $studentInfo->sms_app_created_at,
-          'sms_credentials_exist' => $smsCredentialsExist, // ✅ REVISION 3: Add flag
+          'sms_credentials_exist' => $smsCredentialsExist,
         ]
       ], 200);
 
@@ -113,6 +113,63 @@ class StudentController extends Controller
       return new JsonResponse([
         'success' => false,
         'error' => 'Failed to fetch student profile'
+      ], 500);
+    }
+  }
+
+  /**
+   * ✅ NEW: Get existing parent data for a student with SMS credentials
+   * This pre-fills the parent fields when a student already has SMS credentials
+   */
+  public function getExistingParentData(Request $request): JsonResponse
+  {
+    try {
+      $user = $request->user();
+
+      if (!$user || $user->user_role !== 'Student') {
+        return new JsonResponse([
+          'success' => false,
+          'error' => 'Unauthorized'
+        ], 401);
+      }
+
+      $emergencyContactNumber = $request->query('emergency_contact_number');
+      $schoolCode = $request->query('school_code');
+
+      if (empty($emergencyContactNumber) || empty($schoolCode)) {
+        return new JsonResponse([
+          'success' => false,
+          'error' => 'Missing required parameters'
+        ], 400);
+      }
+
+      // Find existing record with matching emergency_contact_number, school_code, and sms_app_credentials = 'yes'
+      $studentInfo = StudentIdInfo::where('emergency_contact_number', $emergencyContactNumber)
+        ->where('school_code', $schoolCode)
+        ->where('sms_app_credentials', 'yes')
+        ->first();
+
+      if (!$studentInfo) {
+        return new JsonResponse([
+          'success' => false,
+          'error' => 'No existing record found'
+        ], 404);
+      }
+
+      return new JsonResponse([
+        'success' => true,
+        'data' => [
+          'parent_first_name' => $studentInfo->parent_first_name ?? '',
+          'parent_surname' => $studentInfo->parent_surname ?? '',
+          'parent_email' => $studentInfo->parent_email ?? '',
+        ]
+      ], 200);
+
+    } catch (\Throwable $th) {
+      Log::error('Failed to fetch existing parent data: ' . $th->getMessage());
+      return new JsonResponse([
+        'success' => false,
+        'error' => 'Failed to fetch existing parent data'
       ], 500);
     }
   }
@@ -217,12 +274,16 @@ class StudentController extends Controller
         ->bySchoolCode($request->school_code)
         ->byStudentId($request->student_id)
         ->byStudentType($request->student_type)
+        ->byLevel($request->level)
+        ->bySectionCourse($request->section_course)
         ->byIdInfoStatus($request->id_info_status)
         ->byClassDetailsStatus($request->class_details_status)
         ->byIdPrintStatus($request->id_print_status)
         ->byIdReprintStatus($request->id_reprint_status)
         ->byAccountStatus($request->account_status)
         ->byDateRange($request->date_from, $request->date_to)
+        ->byIdInfoApprovalDateRange($request->id_info_approval_date_from, $request->id_info_approval_date_to)
+        ->byClassDetailsApprovalDateRange($request->class_details_approval_date_from, $request->class_details_approval_date_to)
         ->byEmail($request->email)
         ->latest();
 
@@ -270,6 +331,17 @@ class StudentController extends Controller
             : null,
           'created_at' => $student->created_at,
           'name_to_appear_on_id' => $student->name_to_appear_on_id,
+          'nick_name' => $student->nick_name,
+          'birth_date' => $student->birth_date,
+          'gender' => $student->gender,
+          'esc_voucher_recipient' => $student->esc_voucher_recipient,
+          'esc_number' => $student->esc_number,
+          'id_info_approval_date' => $student->id_info_approval_date,
+          'class_details_approval_date' => $student->class_details_approval_date,
+          'id_print_date' => $student->id_print_date,
+          'id_reprint_date' => $student->id_reprint_date,
+          'sms_app_credentials' => $student->sms_app_credentials,
+          'sms_app_created_at' => $student->sms_app_created_at,
         ];
       });
 
@@ -343,9 +415,19 @@ class StudentController extends Controller
       }
 
       $dataToUpdate['id_info_status'] = 'approved';
-      $dataToUpdate['id_info_approval_date'] = Carbon::now('Asia/Manila');
 
       $studentInfo->update($dataToUpdate);
+
+      // Get current timestamp (working correctly)
+      $currentTimestamp = Carbon::now();
+
+      // Update id_info_approval_date
+      DB::table('student_id_info')
+        ->where('student_id', $user->student_id)
+        ->where('school_code', $user->school_code)
+        ->update([
+          'id_info_approval_date' => $currentTimestamp
+        ]);
 
       // Update user record with required fields (IDRS users table)
       $userUpdates = [];
@@ -381,57 +463,78 @@ class StudentController extends Controller
       }
 
       // ============================================================
-      // CHECK IF USER ALREADY EXISTS IN SMS DATABASE
+      // CHECK IF USER ALREADY EXISTS IN SMS DATABASE FOR THIS SCHOOL
       // ============================================================
       $userId = $studentInfo->emergency_contact_number;
+      $email = $studentInfo->parent_email;
+      $schoolCode = $studentInfo->school_code;
       $existingSmsUser = null;
       $smsUserCreated = false;
 
       if (!empty($userId)) {
         try {
+          // Check by user_id AND school_code
           $existingSmsUser = DB::connection('sms_users')
             ->table('users')
             ->where('user_id', $userId)
+            ->where('school_code', $schoolCode)
             ->first();
+
+          if (!$existingSmsUser) {
+            // Check by username AND school_code
+            $existingSmsUser = DB::connection('sms_users')
+              ->table('users')
+              ->where('username', $userId)
+              ->where('school_code', $schoolCode)
+              ->first();
+          }
+
+          Log::info('SMS User check', [
+            'user_id' => $userId,
+            'email' => $email,
+            'school_code' => $schoolCode,
+            'found' => $existingSmsUser ? 'Yes' : 'No'
+          ]);
         } catch (\Exception $e) {
           Log::error('Failed to check existing SMS user: ' . $e->getMessage());
         }
-      }
-
-      // ============================================================
-      // TASK 13: Create login credential in SMS users database
-      // ============================================================
-      if (!$existingSmsUser) {
-        try {
-          $this->syncSmsUser($studentInfo, $validated);
-          $smsUserCreated = true;
-        } catch (\Exception $e) {
-          Log::error('TASK 13 FAILED (SMS User): ' . $e->getMessage());
-        }
       } else {
-        Log::info("SMS User already exists with user_id: {$userId}. Skipping creation.");
-        $smsUserCreated = true;
+        Log::warning("No emergency contact number for student: {$studentInfo->student_id}");
       }
 
-      // ✅ REVISION 2: Update sms_app_credentials and sms_app_created_at
+      // ============================================================
+      // TASK 13: Create OR UPDATE login credential in SMS users database
+      // ============================================================
+      try {
+        $this->syncSmsUser($studentInfo, $validated);
+        $smsUserCreated = true;
+      } catch (\Exception $e) {
+        Log::error('TASK 13 FAILED (SMS User): ' . $e->getMessage());
+      }
+
       if ($smsUserCreated) {
         $studentInfo->sms_app_credentials = 'yes';
-        $studentInfo->sms_app_created_at = Carbon::now('Asia/Manila');
         $studentInfo->save();
+
+        // Update sms_app_created_at with same timestamp
+        DB::table('student_id_info')
+          ->where('student_id', $user->student_id)
+          ->where('school_code', $user->school_code)
+          ->update([
+            'sms_app_created_at' => $currentTimestamp
+          ]);
+
+        $studentInfo->refresh();
         Log::info("Updated sms_app_credentials to 'yes' for student: {$studentInfo->student_id}");
       }
 
       // ============================================================
       // TASK 14: Create student record in school-specific database
       // ============================================================
-      if (!$existingSmsUser) {
-        try {
-          $this->syncStudentRecord($studentInfo, $validated);
-        } catch (\Exception $e) {
-          Log::error('TASK 14 FAILED (Student Record): ' . $e->getMessage());
-        }
-      } else {
-        Log::info("Skipping student record creation because SMS user already exists.");
+      try {
+        $this->syncStudentRecord($studentInfo, $validated);
+      } catch (\Exception $e) {
+        Log::error('TASK 14 FAILED (Student Record): ' . $e->getMessage());
       }
 
       // ============================================================
@@ -447,7 +550,7 @@ class StudentController extends Controller
 
       return new JsonResponse([
         'success' => true,
-        'response' => 'Profile updated and approved successfully',
+        'response' => 'ID Information was successfully submitted',
         'data' => [
           'id' => $studentInfo->id,
           'student_id' => $studentInfo->student_id,
@@ -502,7 +605,7 @@ class StudentController extends Controller
 
   /**
    * TASK 13: Sync user to SMS users database
-   * Check existing before creating
+   * Creates new record for each unique (mobile_number + school_code) combination
    */
   private function syncSmsUser($studentInfo, $validated): void
   {
@@ -511,9 +614,15 @@ class StudentController extends Controller
 
       $userId = $studentInfo->emergency_contact_number;
       $username = $studentInfo->emergency_contact_number;
+      $email = $studentInfo->parent_email;
 
       if (empty($userId)) {
         Log::warning("No emergency contact number for student: {$studentInfo->student_id}");
+        return;
+      }
+
+      if (empty($email)) {
+        Log::warning("No parent email for student: {$studentInfo->student_id}");
         return;
       }
 
@@ -526,43 +635,84 @@ class StudentController extends Controller
       }
       $fullname = trim($fullname, ', ');
 
+      // If fullname is empty, use a fallback
+      if (empty($fullname)) {
+        $fullname = $studentInfo->first_name . ' ' . $studentInfo->surname;
+      }
+
       // Get assigned admin email from school_id table
       $assignedAdminEmail = SchoolId::getEmailByCode($schoolCode);
 
-      // CHECK IF USER ALREADY EXISTS (Requirement 5)
+      // Check if user exists for this specific school code
       $existingUser = DB::connection('sms_users')
         ->table('users')
         ->where('user_id', $userId)
-        ->orWhere('username', $username)
+        ->where('school_code', $schoolCode)
         ->first();
 
       if (!$existingUser) {
+        $existingUser = DB::connection('sms_users')
+          ->table('users')
+          ->where('username', $username)
+          ->where('school_code', $schoolCode)
+          ->first();
+      }
+
+      // Get current timestamp (working correctly)
+      $currentTimestamp = Carbon::now();
+
+      // Only get password if provided
+      $newPassword = $validated['password'] ?? null;
+      $hashedPassword = $newPassword ? Hash::make($newPassword) : null;
+
+      if (!$existingUser) {
+        // Create new user for this school
+        $finalPassword = $newPassword ? $hashedPassword : Hash::make('Default@123');
+
         DB::connection('sms_users')->table('users')->insert([
           'user_id' => $userId,
           'username' => $username,
-          'email' => $studentInfo->parent_email,
-          'password' => Hash::make($validated['password'] ?? 'Default@123'),
+          'email' => $email,
+          'password' => $finalPassword,
           'fullname' => $fullname,
           'school_code' => $schoolCode,
           'account_status' => 'active',
-          'gs_access_status' => 'pending',  // Requirement 3c
-          'assigned_admin_email' => $assignedAdminEmail,  // Requirement 3d
-          'created_at' => Carbon::now('Asia/Manila'),
-          'updated_at' => Carbon::now('Asia/Manila'),
+          'gs_access_status' => 'pending',
+          'assigned_admin_email' => $assignedAdminEmail,
+          'created_at' => $currentTimestamp,
+          'updated_at' => $currentTimestamp,
         ]);
 
-        Log::info("SMS User created: {$username} ({$userId})");
+        Log::info("SMS User created for school {$schoolCode}: {$username} ({$userId})");
       } else {
-        Log::info("SMS User already exists with user_id: {$userId}. Skipping creation.");
+        // Update existing user for this school
+        $updateData = [
+          'fullname' => $fullname,
+          'email' => $email,
+          'assigned_admin_email' => $assignedAdminEmail,
+          'updated_at' => $currentTimestamp,
+        ];
+
+        if ($hashedPassword) {
+          $updateData['password'] = $hashedPassword;
+          Log::info("SMS User password updated for school {$schoolCode}: {$username} ({$userId})");
+        } else {
+          Log::info("SMS User exists for school {$schoolCode} (password unchanged): {$username} ({$userId})");
+        }
+
+        DB::connection('sms_users')->table('users')
+          ->where('id', $existingUser->id)
+          ->update($updateData);
       }
     } catch (\Exception $e) {
       Log::error('Failed to sync SMS user: ' . $e->getMessage());
+      Log::error('Stack trace: ' . $e->getTraceAsString());
     }
   }
 
   /**
    * TASK 14: Sync student record to school-specific database
-   * ONLY insert: user_id, fullname, nickname, school_name, created_at, updated_at
+   * Creates new record for each school database
    */
   private function syncStudentRecord($studentInfo, $validated): void
   {
@@ -603,33 +753,36 @@ class StudentController extends Controller
         return;
       }
 
-      // Check if record already exists
+      // Check if record already exists for this school
       $existingRecord = DB::connection($databaseName)
         ->table('student_records')
         ->where('user_id', $userId)
         ->first();
 
+      // Get current timestamp (working correctly)
+      $currentTimestamp = Carbon::now();
+
       if (!$existingRecord) {
-        // ONLY insert the required fields
+        // Create new record for this school
         DB::connection($databaseName)->table('student_records')->insert([
           'user_id' => $userId,
           'fullname' => $fullname,
           'nickname' => $nickname,
           'school_name' => $schoolName,
-          'created_at' => Carbon::now('Asia/Manila'),
-          'updated_at' => Carbon::now('Asia/Manila'),
+          'created_at' => $currentTimestamp,
+          'updated_at' => $currentTimestamp,
         ]);
 
         Log::info("Student record created in {$databaseName} for user: {$userId}");
       } else {
-        // ONLY update the required fields
+        // Update existing record for this school
         DB::connection($databaseName)->table('student_records')
           ->where('user_id', $userId)
           ->update([
             'fullname' => $fullname,
             'nickname' => $nickname,
             'school_name' => $schoolName,
-            'updated_at' => Carbon::now('Asia/Manila'),
+            'updated_at' => $currentTimestamp,
           ]);
 
         Log::info("Student record updated in {$databaseName} for user: {$userId}");
@@ -641,6 +794,7 @@ class StudentController extends Controller
 
   /**
    * TASK 15: Send email to parent/guardian
+   * For existing users (resubmissions), show "your 1st nominated password" instead of actual password
    */
   private function sendParentEmail($studentInfo, $validated): void
   {
@@ -658,7 +812,19 @@ class StudentController extends Controller
       );
 
       $username = $studentInfo->emergency_contact_number;
-      $password = $validated['password'] ?? 'Default@123';
+
+      // Check if this is an existing user (resubmission)
+      $isExistingUser = $studentInfo->sms_app_credentials === 'yes';
+
+      if ($isExistingUser) {
+        // For existing users, show "your 1st nominated password" instead of the actual password
+        $password = 'your 1st nominated password';
+        Log::info('Sending email for existing user (resubmission): ' . $studentInfo->student_id);
+      } else {
+        // For new users, show the actual password they submitted
+        $password = $validated['password'] ?? 'Default@123';
+        Log::info('Sending email for new user: ' . $studentInfo->student_id);
+      }
 
       $emailData = [
         'name_to_appear_on_id' => $studentInfo->name_to_appear_on_id ?? $studentInfo->first_name . ' ' . $studentInfo->surname,

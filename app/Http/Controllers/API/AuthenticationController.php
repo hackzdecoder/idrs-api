@@ -9,11 +9,71 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Http\JsonResponse;
 use Carbon\Carbon;
 
 class AuthenticationController extends Controller
 {
+  /**
+   * ✅ TASK 1 & 3: Check if mobile number and school code are already registered in SMS database
+   * 
+   * @param string $mobileNumber The emergency contact number
+   * @param string $schoolCode The school code
+   * @return array Registration status
+   */
+  private function checkSmsRegistrationStatus($mobileNumber, $schoolCode): array
+  {
+    try {
+      if (empty($mobileNumber) || empty($schoolCode)) {
+        return [
+          'is_registered' => false,
+          'has_credentials' => false
+        ];
+      }
+
+      // Check if mobile number exists in SMS users database for this specific school
+      $smsUser = DB::connection('sms_users')
+        ->table('users')
+        ->where('user_id', $mobileNumber)
+        ->where('school_code', $schoolCode)
+        ->first();
+
+      if (!$smsUser) {
+        $smsUser = DB::connection('sms_users')
+          ->table('users')
+          ->where('username', $mobileNumber)
+          ->where('school_code', $schoolCode)
+          ->first();
+      }
+
+      if (!$smsUser) {
+        return [
+          'is_registered' => false,
+          'has_credentials' => false
+        ];
+      }
+
+      // Check student_id_info for matching school_code and sms_app_credentials = 'yes'
+      $studentInfo = StudentIdInfo::where('emergency_contact_number', $mobileNumber)
+        ->where('school_code', $schoolCode)
+        ->first();
+
+      $hasCredentials = $studentInfo && $studentInfo->sms_app_credentials === 'yes';
+
+      return [
+        'is_registered' => true,
+        'has_credentials' => $hasCredentials
+      ];
+    } catch (\Exception $e) {
+      \Log::error('Failed to check SMS registration status: ' . $e->getMessage());
+      return [
+        'is_registered' => false,
+        'has_credentials' => false
+      ];
+    }
+  }
+
   /**
    * Authenticate admin/super admin or student login (unified endpoint)
    */
@@ -45,6 +105,7 @@ class AuthenticationController extends Controller
       $user = null;
       $studentInfo = null;
       $redirectTo = null;
+      $smsStatus = ['is_registered' => false, 'has_credentials' => false];
 
       // Handle Admin Login
       if ($isAdminLogin) {
@@ -71,10 +132,11 @@ class AuthenticationController extends Controller
 
       // Handle Student Login
       if ($isStudentLogin) {
-        // Find user with exact match
+        // ✅ TASK 7: Only allow users with 'Student' role to login via student page
         $user = User::where('student_id', $request->student_id)
           ->where('school_code', $request->school_code)
           ->where('mobile_number', $request->mobile_no)
+          ->where('user_role', 'Student')  // ✅ Prevents Super Admin/Admin from student login
           ->first();
 
         if (!$user) {
@@ -89,6 +151,18 @@ class AuthenticationController extends Controller
         $studentInfo = StudentIdInfo::where('student_id', $request->student_id)
           ->where('school_code', $request->school_code)
           ->first();
+
+        // ✅ TASK 1: Check SMS registration status with mobile number AND school code
+        $smsStatus = $this->checkSmsRegistrationStatus($request->mobile_no, $request->school_code);
+
+        // Log the result for debugging
+        \Log::info('SMS Registration Check Result', [
+          'student_id' => $request->student_id,
+          'mobile_number' => $request->mobile_no,
+          'school_code' => $request->school_code,
+          'is_registered' => $smsStatus['is_registered'],
+          'has_credentials' => $smsStatus['has_credentials']
+        ]);
 
         // Check id_info_status to determine redirect
         if ($studentInfo && strtolower($studentInfo->id_info_status) === 'pending') {
@@ -106,9 +180,21 @@ class AuthenticationController extends Controller
         ], 403);
       }
 
-      // ✅ FIX: Record last successful login timestamp with proper timezone
-      $user->last_successful_login = Carbon::now()->setTimezone('Asia/Manila');
-      $user->save();
+      // ✅ TASKS 3 & 4: Fix last_successful_login timestamp (matching working pattern)
+      $currentTimestamp = Carbon::now();
+      DB::table('users')
+        ->where('id', $user->id)
+        ->update([
+          'last_successful_login' => $currentTimestamp
+        ]);
+
+      \Log::info('Timestamp Debug:', [
+        'carbon_now' => Carbon::now()->toDateTimeString(),
+        'carbon_asia' => Carbon::now('Asia/Manila')->toDateTimeString(),
+        'php_timezone' => date_default_timezone_get(),
+        'config_timezone' => config('app.timezone'),
+        'timestamp_saved' => $currentTimestamp
+      ]);
 
       RateLimiter::clear($key);
 
@@ -118,13 +204,13 @@ class AuthenticationController extends Controller
       // Create tokens
       $accessToken = Tokens::createAccessToken($user);
       $refreshToken = Tokens::createRefreshToken($user);
-      $accessExpiresAt = Carbon::now()->setTimezone('Asia/Manila')->addHours(8);
+      $accessExpiresAt = Carbon::now('Asia/Manila')->addHours(8);
 
       // Prepare user data
       $userData = [
         'id' => $user->id,
         'username' => $user->username,
-        'email' => $user->school_email ?? $user->email ?? null, // ✅ Use school_email
+        'email' => $user->school_email ?? $user->email ?? null,
         'account_name' => $user->account_name,
         'role' => $user->user_role,
         'account_status' => $user->account_status,
@@ -137,6 +223,10 @@ class AuthenticationController extends Controller
         $userData['school_code'] = $user->school_code;
         $userData['redirect_to'] = $redirectTo;
 
+        // ✅ TASK 1: Add SMS registration status to login response
+        $userData['sms_registered'] = $smsStatus['is_registered'];
+        $userData['sms_credentials_exist'] = $smsStatus['has_credentials'];
+
         if ($studentInfo) {
           $userData['student_info'] = [
             'first_name' => $studentInfo->first_name,
@@ -144,6 +234,7 @@ class AuthenticationController extends Controller
             'level' => $studentInfo->level,
             'section_course' => $studentInfo->section_course,
             'id_info_status' => $studentInfo->id_info_status,
+            'sms_app_credentials' => $studentInfo->sms_app_credentials,
           ];
         }
       }
@@ -180,6 +271,7 @@ class AuthenticationController extends Controller
       return $response;
 
     } catch (\Throwable $th) {
+      \Log::error('Login error: ' . $th->getMessage());
       return new JsonResponse([
         'success' => false,
         'error' => 'Cannot login: ' . $th->getMessage()
@@ -215,7 +307,7 @@ class AuthenticationController extends Controller
       return new JsonResponse([
         'success' => true,
         'access_token' => $newAccessToken,
-        'access_expires_at' => Carbon::now()->setTimezone('Asia/Manila')->addHours(8)->toDateTimeString()
+        'access_expires_at' => Carbon::now('Asia/Manila')->addHours(8)->toDateTimeString()
       ], 200);
 
     } catch (\Throwable $th) {
@@ -281,7 +373,7 @@ class AuthenticationController extends Controller
         'user' => [
           'id' => $user->id,
           'username' => $user->username,
-          'email' => $user->school_email ?? null, // ✅ Use school_email
+          'email' => $user->school_email ?? null,
           'role' => $user->user_role,
           'account_status' => $user->account_status,
         ]

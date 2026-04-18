@@ -53,19 +53,35 @@
       padding-bottom: 5px;
     }
 
-    .info-row {
-      display: flex;
+    .info-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .info-table tr {
       margin-bottom: 8px;
     }
 
     .info-label {
       font-weight: 600;
-      width: 220px;
+      width: 280px;
       color: #64748b;
+      padding: 6px 0;
+      text-align: left;
+    }
+
+    .info-colon {
+      width: 30px;
+      color: #64748b;
+      padding: 6px 0;
+      text-align: center;
+      font-weight: 600;
     }
 
     .info-value {
       color: #1e293b;
+      padding: 6px 0;
+      text-align: left;
     }
 
     .credentials-box {
@@ -97,13 +113,6 @@
       border-radius: 4px;
       border: 1px solid #cbd5e1;
       margin-top: 5px;
-    }
-
-    .password-note {
-      color: #dc2626;
-      font-size: 12px;
-      margin-top: 5px;
-      font-style: italic;
     }
 
     .links {
@@ -155,43 +164,55 @@
 
       <div class="section">
         <div class="section-title">Submitted Information</div>
-        <div class="info-row">
-          <span class="info-label">Name to Appear on ID Card :</span>
-          <span class="info-value">{{ $name_to_appear_on_id ?? '—' }}</span>
-        </div>
-        <div class="info-row">
-          <span class="info-label">Residential Address :</span>
-          <span class="info-value">{{ $residential_address ?? '—' }}</span>
-        </div>
-        <div class="info-row">
-          <span class="info-label">Emergency Contact Person :</span>
-          <span class="info-value">{{ $emergency_contact_person ?? '—' }}</span>
-        </div>
-        <div class="info-row">
-          <span class="info-label">Emergency Contact Number :</span>
-          <span class="info-value">{{ $emergency_contact_number ?? '—' }}</span>
-        </div>
+        <table class="info-table">
+          <tr>
+            <td class="info-label">Name to Appear on ID Card</td>
+            <td class="info-colon">:</td>
+            <td class="info-value">{{ $name_to_appear_on_id ?? '—' }}</td>
+          </tr>
+          <tr>
+            <td class="info-label">Residential Address</td>
+            <td class="info-colon">:</td>
+            <td class="info-value">{{ $residential_address ?? '—' }}</td>
+          </tr>
+          <tr>
+            <td class="info-label">Emergency Contact Person</td>
+            <td class="info-colon">:</td>
+            <td class="info-value">{{ $emergency_contact_person ?? '—' }}</td>
+          </tr>
+          <tr>
+            <td class="info-label">Emergency Contact Number</td>
+            <td class="info-colon">:</td>
+            <td class="info-value">{{ $emergency_contact_number ?? '—' }}</td>
+          </tr>
+        </table>
       </div>
 
       <p><em>The following information below are subject to the school's final confirmation and approval.</em></p>
 
       <div class="section">
-        <div class="info-row">
-          <span class="info-label">Level :</span>
-          <span class="info-value">{{ $level ?? '—' }}</span>
-        </div>
-        <div class="info-row">
-          <span class="info-label">Section/Course :</span>
-          <span class="info-value">{{ $section_course ?? '—' }}</span>
-        </div>
-        <div class="info-row">
-          <span class="info-label">LRN :</span>
-          <span class="info-value">{{ $lrn ?? '—' }}</span>
-        </div>
-        <div class="info-row">
-          <span class="info-label">ESC Number :</span>
-          <span class="info-value">{{ $esc_number ?? '—' }}</span>
-        </div>
+        <table class="info-table">
+          <tr>
+            <td class="info-label">Level</td>
+            <td class="info-colon">:</td>
+            <td class="info-value">{{ $level ?? '—' }}</td>
+          </tr>
+          <tr>
+            <td class="info-label">Section/Course</td>
+            <td class="info-colon">:</td>
+            <td class="info-value">{{ $section_course ?? '—' }}</td>
+          </tr>
+          <tr>
+            <td class="info-label">LRN</td>
+            <td class="info-colon">:</td>
+            <td class="info-value">{{ $lrn ?? '—' }}</td>
+          </tr>
+          <tr>
+            <td class="info-label">ESC Number</td>
+            <td class="info-colon">:</td>
+            <td class="info-value">{{ $esc_number ?? '—' }}</td>
+          </tr>
+        </table>
       </div>
 
       <p>Below are the login credentials for accessing the SchoolMANAGER system.</p>
@@ -204,7 +225,6 @@
         <div class="credential-item">
           <div class="credential-label">Password</div>
           <div class="credential-value">{{ $password ?? '—' }}</div>
-          <div class="password-note">(nominated password - not yet hashed)</div>
         </div>
       </div>
 
