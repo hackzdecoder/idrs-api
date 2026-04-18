@@ -550,7 +550,7 @@ class StudentController extends Controller
 
       return new JsonResponse([
         'success' => true,
-        'response' => 'Profile updated and approved successfully',
+        'response' => 'ID Information was successfully submitted',
         'data' => [
           'id' => $studentInfo->id,
           'student_id' => $studentInfo->student_id,
