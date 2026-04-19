@@ -416,6 +416,9 @@ class StudentController extends Controller
 
       $dataToUpdate['id_info_status'] = 'approved';
 
+      // ✅ ABSOLUTE FIX: Store the original approval status BEFORE update
+      $wasAlreadyApproved = !is_null($studentInfo->id_info_approval_date);
+
       $studentInfo->update($dataToUpdate);
 
       // Get current timestamp (working correctly)
@@ -539,9 +542,10 @@ class StudentController extends Controller
 
       // ============================================================
       // TASK 15: Send email to parent/guardian
+      // Pass the original approval status to determine email content
       // ============================================================
       try {
-        $this->sendParentEmail($studentInfo, $validated);
+        $this->sendParentEmail($studentInfo, $validated, $wasAlreadyApproved);
       } catch (\Exception $e) {
         Log::error('TASK 15 FAILED (Email): ' . $e->getMessage());
       }
@@ -794,9 +798,14 @@ class StudentController extends Controller
 
   /**
    * TASK 15: Send email to parent/guardian
-   * For existing users (resubmissions), show "your 1st nominated password" instead of actual password
+   * 
+   * Logic:
+   * a. First time submission (wasAlreadyApproved = false) -> show actual unhashed password
+   * b. 2nd or succeeding submission (wasAlreadyApproved = true) -> show "your 1st nominated password"
+   * 
+   * @param bool $wasAlreadyApproved Whether the record was already approved before this submission
    */
-  private function sendParentEmail($studentInfo, $validated): void
+  private function sendParentEmail($studentInfo, $validated, $wasAlreadyApproved = false): void
   {
     try {
       $parentEmail = $studentInfo->parent_email;
@@ -813,17 +822,22 @@ class StudentController extends Controller
 
       $username = $studentInfo->emergency_contact_number;
 
-      // Check if this is an existing user (resubmission)
-      $isExistingUser = $studentInfo->sms_app_credentials === 'yes';
-
-      if ($isExistingUser) {
-        // For existing users, show "your 1st nominated password" instead of the actual password
+      // ✅ Check if this is a resubmission (already approved before)
+      if ($wasAlreadyApproved) {
+        // Scenario b: 2nd or succeeding submission
         $password = 'your 1st nominated password';
-        Log::info('Sending email for existing user (resubmission): ' . $studentInfo->student_id);
+        Log::info('Resubmission - showing placeholder: ' . $studentInfo->student_id);
       } else {
-        // For new users, show the actual password they submitted
-        $password = $validated['password'] ?? 'Default@123';
-        Log::info('Sending email for new user: ' . $studentInfo->student_id);
+        // Scenario a: First time submission
+        // Check if password was actually submitted
+        if (!empty($validated['password'])) {
+          $password = $validated['password'];
+          Log::info('First time submission with password - showing actual password: ' . $studentInfo->student_id);
+        } else {
+          // This should not happen for first time, but as fallback
+          $password = 'your nominated password';
+          Log::warning('First time submission but no password provided: ' . $studentInfo->student_id);
+        }
       }
 
       $emailData = [

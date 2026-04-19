@@ -225,6 +225,10 @@
         <div class="credential-item">
           <div class="credential-label">Password</div>
           <div class="credential-value">{{ $password ?? '—' }}</div>
+          @if($password === 'your 1st nominated password')
+            <small style="color: #64748b; font-size: 12px;">(Your password remains unchanged from your first
+              registration)</small>
+          @endif
         </div>
       </div>
 
