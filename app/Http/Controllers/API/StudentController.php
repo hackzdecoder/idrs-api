@@ -454,11 +454,13 @@ class StudentController extends Controller
       }
 
       // Update account name
-      $fullName = trim(
-        ($validated['first_name'] ?? $studentInfo->first_name) . ' ' .
-        (($validated['middle_initial'] ?? $studentInfo->middle_initial) ? ($validated['middle_initial'] ?? $studentInfo->middle_initial) . ' ' : '') .
-        ($validated['surname'] ?? $studentInfo->surname)
-      );
+      $firstName = $validated['first_name'] ?? $studentInfo->first_name;
+      $middleInitial = ($validated['middle_initial'] ?? $studentInfo->middle_initial)
+        ? rtrim(($validated['middle_initial'] ?? $studentInfo->middle_initial), '.') . '.'
+        : '';
+      $lastName = $validated['surname'] ?? $studentInfo->surname;
+
+      $fullName = trim($lastName . ', ' . $firstName . ' ' . $middleInitial);
       $userUpdates['account_name'] = $fullName;
 
       if (!empty($userUpdates)) {
