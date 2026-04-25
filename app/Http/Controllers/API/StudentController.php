@@ -82,7 +82,7 @@ class StudentController extends Controller
           'username' => $studentInfo->user->username ?? null,
           'name_to_appear_on_id' => $studentInfo->name_to_appear_on_id,
           'nick_name' => $studentInfo->nick_name,
-          'birth_date' => $studentInfo->birth_date,
+          'birth_date' => $studentInfo->birth_date ? date('Y-m-d', strtotime($studentInfo->birth_date)) : null,
           'gender' => $studentInfo->gender,
           'residential_address' => $studentInfo->residential_address,
           'emergency_contact_person' => $studentInfo->emergency_contact_person,
