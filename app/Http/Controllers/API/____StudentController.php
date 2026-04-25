@@ -647,7 +647,7 @@ class StudentController extends Controller
       // Get assigned admin email from school_id table
       $assignedAdminEmail = SchoolId::getEmailByCode($schoolCode);
 
-      // ✅ Check if user exists for this specific school code (user_id + school_code)
+      // Check if user exists for this specific school code
       $existingUser = DB::connection('sms_users')
         ->table('users')
         ->where('user_id', $userId)
@@ -655,7 +655,6 @@ class StudentController extends Controller
         ->first();
 
       if (!$existingUser) {
-        // ✅ Check by username AND school_code
         $existingUser = DB::connection('sms_users')
           ->table('users')
           ->where('username', $username)
@@ -663,7 +662,7 @@ class StudentController extends Controller
           ->first();
       }
 
-      // Get current timestamp
+      // Get current timestamp (working correctly)
       $currentTimestamp = Carbon::now();
 
       // Only get password if provided
@@ -705,10 +704,8 @@ class StudentController extends Controller
           Log::info("SMS User exists for school {$schoolCode} (password unchanged): {$username} ({$userId})");
         }
 
-        // ✅ FIXED: UPDATE must also include school_code in WHERE clause
         DB::connection('sms_users')->table('users')
           ->where('id', $existingUser->id)
-          ->where('school_code', $schoolCode)  // ✅ ADD THIS LINE
           ->update($updateData);
       }
     } catch (\Exception $e) {
@@ -740,13 +737,17 @@ class StudentController extends Controller
         return;
       }
 
+      // Format: Last Name, First Name
       $fullname = $parentLastName;
       if ($parentFirstName) {
         $fullname = $parentLastName . ', ' . $parentFirstName;
       }
       $fullname = trim($fullname, ', ');
 
+      // nickname is the first name of parent/guardian
       $nickname = $parentFirstName ?: 'Parent';
+
+      // Get school name from school_id table
       $schoolName = SchoolId::getNameByCode($schoolCode) ?? $schoolCode;
 
       try {
@@ -756,32 +757,31 @@ class StudentController extends Controller
         return;
       }
 
-      // ✅ FIXED: Check with BOTH user_id AND school_code
+      // Check if record already exists for this school
       $existingRecord = DB::connection($databaseName)
         ->table('student_records')
         ->where('user_id', $userId)
-        ->where('school_code', $schoolCode)  // ✅ ADD THIS
         ->first();
 
+      // Get current timestamp (working correctly)
       $currentTimestamp = Carbon::now();
 
       if (!$existingRecord) {
+        // Create new record for this school
         DB::connection($databaseName)->table('student_records')->insert([
           'user_id' => $userId,
           'fullname' => $fullname,
           'nickname' => $nickname,
           'school_name' => $schoolName,
-          'school_code' => $schoolCode,  // ✅ ADD THIS
           'created_at' => $currentTimestamp,
           'updated_at' => $currentTimestamp,
         ]);
 
         Log::info("Student record created in {$databaseName} for user: {$userId}");
       } else {
-        // ✅ FIXED: Update with BOTH user_id AND school_code
+        // Update existing record for this school
         DB::connection($databaseName)->table('student_records')
           ->where('user_id', $userId)
-          ->where('school_code', $schoolCode)  // ✅ ADD THIS
           ->update([
             'fullname' => $fullname,
             'nickname' => $nickname,
