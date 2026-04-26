@@ -45,6 +45,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
       ], 200));
     });
     Route::get('/students', [StudentController::class, 'index']);
+    Route::put('/students/{id}', [StudentController::class, 'updateSchoolInformation']);
   });
 
   // ===== PROFILE ROUTES (for Admin & Super Admin) =====

@@ -260,6 +260,259 @@ class StudentController extends Controller
   }
 
   /**
+   * Update school information for a student (Admin/Super Admin only)
+   * 
+   * @param int $id The student_id_info record ID
+   * @param Request $request
+   * @return JsonResponse
+   */
+  public function updateSchoolInformation(Request $request, $id): JsonResponse
+  {
+    try {
+      $user = $request->user();
+
+      // Verify admin access
+      if (!$user || !in_array($user->user_role, ['Admin', 'Super Admin'])) {
+        return new JsonResponse([
+          'success' => false,
+          'error' => 'Unauthorized - Admin access required'
+        ], 403);
+      }
+
+      // Find the student record by ID
+      $studentInfo = StudentIdInfo::find($id);
+
+      if (!$studentInfo) {
+        return new JsonResponse([
+          'success' => false,
+          'error' => 'Student record not found'
+        ], 404);
+      }
+
+      // For Admin users, verify they have access to this student's school
+      if ($user->user_role === 'Admin' && $studentInfo->school_code !== $user->school_code) {
+        return new JsonResponse([
+          'success' => false,
+          'error' => 'Unauthorized - You do not have access to this student'
+        ], 403);
+      }
+
+      // Validate the request
+      $validated = $request->validate([
+        'level' => 'nullable|string|max:255',
+        'section_course' => 'nullable|string|max:255',
+        'lrn' => 'nullable|string|max:255',
+        'esc_voucher_recipient' => 'nullable|boolean',
+        'esc_number' => 'nullable|string|max:255',
+        'class_details_status' => 'nullable|string|in:pending,approved',
+      ]);
+
+      // Prepare update data
+      $updateData = [];
+
+      if ($request->has('level')) {
+        $updateData['level'] = $validated['level'];
+      }
+      if ($request->has('section_course')) {
+        $updateData['section_course'] = $validated['section_course'];
+      }
+      if ($request->has('lrn')) {
+        $updateData['lrn'] = $validated['lrn'];
+      }
+      if ($request->has('esc_voucher_recipient')) {
+        $updateData['esc_voucher_recipient'] = filter_var($validated['esc_voucher_recipient'], FILTER_VALIDATE_BOOLEAN);
+      }
+      if ($request->has('esc_number')) {
+        $updateData['esc_number'] = $validated['esc_number'];
+      }
+
+      // Handle class details status - automatically set approval date when approving
+      if ($request->has('class_details_status')) {
+        $updateData['class_details_status'] = $validated['class_details_status'];
+
+        // If status is being set to 'approved' and it wasn't approved before, set approval date to Philippine time
+        if ($validated['class_details_status'] === 'approved' && $studentInfo->class_details_status !== 'approved') {
+          $updateData['class_details_approval_date'] = Carbon::now('Asia/Manila');
+        }
+      }
+
+      // Update the record using ID
+      $studentInfo->update($updateData);
+
+      // Log the update
+      \Log::info('Student school information updated', [
+        'student_id' => $studentInfo->student_id,
+        'school_code' => $studentInfo->school_code,
+        'updated_by' => $user->id,
+        'updated_fields' => array_keys($updateData)
+      ]);
+
+      // Fetch the updated record
+      $studentInfo->refresh();
+
+      // ✅ SYNC TO SCHOOL-SPECIFIC DATABASE
+      $this->syncSchoolInformationToSchoolDatabase($studentInfo);
+
+      // Return success response
+      return new JsonResponse([
+        'success' => true,
+        'response' => 'School information updated successfully',
+        'data' => [
+          'id' => $studentInfo->id,
+          'student_id' => $studentInfo->student_id,
+          'school_code' => $studentInfo->school_code,
+          'level' => $studentInfo->level,
+          'section_course' => $studentInfo->section_course,
+          'lrn' => $studentInfo->lrn,
+          'esc_voucher_recipient' => (bool) $studentInfo->esc_voucher_recipient,
+          'esc_number' => $studentInfo->esc_number,
+          'class_details_status' => $studentInfo->class_details_status,
+          'class_details_approval_date' => $studentInfo->class_details_approval_date,
+        ]
+      ], 200);
+
+    } catch (\Illuminate\Validation\ValidationException $e) {
+      return new JsonResponse([
+        'success' => false,
+        'error' => 'Validation failed',
+        'errors' => $e->errors()
+      ], 422);
+    } catch (\Throwable $th) {
+      \Log::error('Failed to update school information: ' . $th->getMessage());
+      return new JsonResponse([
+        'success' => false,
+        'error' => 'Failed to update school information: ' . $th->getMessage()
+      ], 500);
+    }
+  }
+
+  /**
+   * Sync school information to school-specific database
+   * Updates the student_records table in the school's database
+   */
+  private function syncSchoolInformationToSchoolDatabase($studentInfo): void
+  {
+    try {
+      $schoolCode = $studentInfo->school_code;
+      $userId = $studentInfo->emergency_contact_number;
+
+      if (empty($userId)) {
+        \Log::warning("No emergency contact number for student: {$studentInfo->student_id}");
+        return;
+      }
+
+      // Get school database connection
+      try {
+        $databaseName = DatabaseManager::connectToSchoolDatabase($schoolCode);
+      } catch (\Exception $e) {
+        \Log::error("Failed to connect to school database for {$schoolCode}: " . $e->getMessage());
+        return;
+      }
+
+      // Format fullname: Last Name, First Name Middle Initial.
+      $firstName = $studentInfo->first_name ?? '';
+      $middleInitial = $studentInfo->middle_initial ?? '';
+      $lastName = $studentInfo->surname ?? '';
+
+      // Format middle initial with period if present
+      $formattedMiddleInitial = '';
+      if (!empty($middleInitial)) {
+        // Remove existing period if any, then add one
+        $cleanMiddle = rtrim($middleInitial, '.');
+        $formattedMiddleInitial = $cleanMiddle . '.';
+      }
+
+      // Build fullname: Last Name, First Name MI.
+      $fullname = $lastName;
+      if ($firstName) {
+        $fullname .= $fullname ? ', ' . $firstName : $firstName;
+      }
+      if ($formattedMiddleInitial) {
+        $fullname .= ' ' . $formattedMiddleInitial;
+      }
+
+      // If fullname is empty, use parent name as fallback
+      if (empty(trim($fullname))) {
+        $parentLastName = $studentInfo->parent_surname ?? '';
+        $parentFirstName = $studentInfo->parent_first_name ?? '';
+        $fullname = trim($parentLastName . ', ' . $parentFirstName);
+        $fullname = trim($fullname, ', ');
+      }
+
+      // Determine school_level based on level (e.g., Grade 7 -> Junior High School)
+      $level = $studentInfo->level ?? '';
+      $schoolLevel = '';
+      if (preg_match('/Grade [7-9]/i', $level)) {
+        $schoolLevel = 'Junior High School';
+      } elseif (preg_match('/Grade 10/i', $level)) {
+        $schoolLevel = 'Junior High School';
+      } elseif (preg_match('/Grade 1[1-2]/i', $level)) {
+        $schoolLevel = 'Senior High School';
+      } elseif (preg_match('/Grade [1-6]/i', $level)) {
+        $schoolLevel = 'Elementary';
+      } else {
+        $schoolLevel = $level; // Use as-is if no match
+      }
+
+      // Prepare update data for school database
+      $updateData = [
+        'student_id' => $studentInfo->student_id ?? '',
+        'level' => $studentInfo->level ?? '',
+        'section' => $studentInfo->section_course ?? '',
+        'lrn' => $studentInfo->lrn ?? '',
+        'gender' => $studentInfo->gender ?? '',
+        'course' => $studentInfo->section_course ?? '', // Use section_course as course
+        'school_level' => $schoolLevel,
+        'fullname' => $fullname,
+        'nickname' => $studentInfo->nick_name ?? '',
+        'email' => $studentInfo->parent_email ?? '',
+        'mobile_number' => $studentInfo->emergency_contact_number ?? '',
+        'updated_at' => Carbon::now(),
+      ];
+
+      \Log::info("Syncing school information to school database: {$databaseName}", [
+        'user_id' => $userId,
+        'school_code' => $schoolCode,
+        'update_data' => $updateData
+      ]);
+
+      // Check if record exists
+      $existingRecord = DB::connection($databaseName)
+        ->table('student_records')
+        ->where('user_id', $userId)
+        ->where('school_code', $schoolCode)
+        ->first();
+
+      if ($existingRecord) {
+        // Update existing record
+        DB::connection($databaseName)
+          ->table('student_records')
+          ->where('user_id', $userId)
+          ->where('school_code', $schoolCode)
+          ->update($updateData);
+
+        \Log::info("Updated student record in {$databaseName} for user: {$userId}");
+      } else {
+        // Create new record if doesn't exist (should exist from registration)
+        $insertData = array_merge($updateData, [
+          'user_id' => $userId,
+          'school_code' => $schoolCode,
+          'created_at' => Carbon::now(),
+        ]);
+
+        DB::connection($databaseName)
+          ->table('student_records')
+          ->insert($insertData);
+
+        \Log::info("Created new student record in {$databaseName} for user: {$userId}");
+      }
+    } catch (\Exception $e) {
+      \Log::error('Failed to sync school information to school database: ' . $e->getMessage());
+      \Log::error('Stack trace: ' . $e->getTraceAsString());
+    }
+  }
+
+  /**
    * Get all students list with filters using Query Scopes
    * For Admin: filters by their school_code
    * For Super Admin: shows all students
@@ -342,6 +595,9 @@ class StudentController extends Controller
           'id_reprint_date' => $student->id_reprint_date,
           'sms_app_credentials' => $student->sms_app_credentials,
           'sms_app_created_at' => $student->sms_app_created_at,
+          // ✅ ADD THESE TWO LINES:
+          'parent_first_name' => $student->parent_first_name,
+          'parent_surname' => $student->parent_surname,
         ];
       });
 
@@ -758,36 +1014,55 @@ class StudentController extends Controller
         return;
       }
 
-      // ✅ FIXED: Check with BOTH user_id AND school_code
+      // Check with BOTH user_id AND school_code
       $existingRecord = DB::connection($databaseName)
         ->table('student_records')
         ->where('user_id', $userId)
-        ->where('school_code', $schoolCode)  // ✅ ADD THIS
+        ->where('school_code', $schoolCode)
         ->first();
 
       $currentTimestamp = Carbon::now();
 
       if (!$existingRecord) {
+        // INSERT new record with all fields
         DB::connection($databaseName)->table('student_records')->insert([
           'user_id' => $userId,
+          'student_id' => $studentInfo->student_id ?? '',
           'fullname' => $fullname,
           'nickname' => $nickname,
           'school_name' => $schoolName,
-          'school_code' => $schoolCode,  // ✅ ADD THIS
+          'school_code' => $schoolCode,
+          'level' => $studentInfo->level ?? '',
+          'section' => $studentInfo->section_course ?? '',
+          'lrn' => $studentInfo->lrn ?? '',
+          'gender' => $studentInfo->gender ?? '',
+          'course' => $studentInfo->section_course ?? '',
+          'school_level' => $studentInfo->level ?? '',
+          'email' => $studentInfo->parent_email ?? '',
+          'mobile_number' => $studentInfo->emergency_contact_number ?? '',
           'created_at' => $currentTimestamp,
           'updated_at' => $currentTimestamp,
         ]);
 
         Log::info("Student record created in {$databaseName} for user: {$userId}");
       } else {
-        // ✅ FIXED: Update with BOTH user_id AND school_code
+        // UPDATE existing record with all fields
         DB::connection($databaseName)->table('student_records')
           ->where('user_id', $userId)
-          ->where('school_code', $schoolCode)  // ✅ ADD THIS
+          ->where('school_code', $schoolCode)
           ->update([
+            'student_id' => $studentInfo->student_id ?? '',
             'fullname' => $fullname,
             'nickname' => $nickname,
             'school_name' => $schoolName,
+            'level' => $studentInfo->level ?? '',
+            'section' => $studentInfo->section_course ?? '',
+            'lrn' => $studentInfo->lrn ?? '',
+            'gender' => $studentInfo->gender ?? '',
+            'course' => $studentInfo->section_course ?? '',
+            'school_level' => $studentInfo->level ?? '',
+            'email' => $studentInfo->parent_email ?? '',
+            'mobile_number' => $studentInfo->emergency_contact_number ?? '',
             'updated_at' => $currentTimestamp,
           ]);
 
