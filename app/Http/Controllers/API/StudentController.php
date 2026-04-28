@@ -333,6 +333,7 @@ class StudentController extends Controller
 
   /**
    * Update school information for a student (Admin/Super Admin only)
+   * ONLY updates student_id_info table
    * 
    * @param int $id The student_id_info record ID
    * @param Request $request
@@ -408,7 +409,7 @@ class StudentController extends Controller
         }
       }
 
-      // Update the record using ID
+      // ✅ ONLY UPDATE student_id_info table
       $studentInfo->update($updateData);
 
       // Log the update
@@ -419,11 +420,7 @@ class StudentController extends Controller
         'updated_fields' => array_keys($updateData)
       ]);
 
-      // Fetch the updated record
       $studentInfo->refresh();
-
-      // ✅ SYNC TO SCHOOL-SPECIFIC DATABASE
-      $this->syncSchoolInformationToSchoolDatabase($studentInfo);
 
       // Return success response
       return new JsonResponse([
@@ -688,7 +685,7 @@ class StudentController extends Controller
   }
 
   /**
-   * Update student profile
+   * Update student profile - ONLY updates student_id_info table
    */
   public function student_profile_update(Request $request): JsonResponse
   {
@@ -743,144 +740,34 @@ class StudentController extends Controller
       }
 
       $dataToUpdate['id_info_status'] = 'approved';
-
-      // ✅ ABSOLUTE FIX: Store the original approval status BEFORE update
       $wasAlreadyApproved = !is_null($studentInfo->id_info_approval_date);
 
+      // ✅ ONLY UPDATE student_id_info table
       $studentInfo->update($dataToUpdate);
-
-      // Get current timestamp (working correctly)
-      $currentTimestamp = Carbon::now();
 
       // Update id_info_approval_date
       DB::table('student_id_info')
         ->where('student_id', $user->student_id)
         ->where('school_code', $user->school_code)
         ->update([
-          'id_info_approval_date' => $currentTimestamp
+          'id_info_approval_date' => Carbon::now()
         ]);
 
-      // Update user record with required fields (IDRS users table)
-      $userUpdates = [];
-      $userUpdates['account_status'] = 'active';
-
-      if (!empty($studentInfo->emergency_contact_number)) {
-        $userUpdates['mobile_number'] = $studentInfo->emergency_contact_number;
-      }
-
-      if (!empty($validated['password'])) {
-        $userUpdates['password'] = Hash::make($validated['password']);
-      }
-
-      if (!empty($studentInfo->parent_email)) {
-        $userUpdates['school_email'] = $studentInfo->parent_email;
-      }
-
-      if (empty($user->username)) {
-        $username = strtolower(substr($studentInfo->first_name, 0, 1) . $studentInfo->surname);
-        $userUpdates['username'] = $username;
-      }
-
-      // Update account name
-      $firstName = $validated['first_name'] ?? $studentInfo->first_name;
-      $middleInitial = ($validated['middle_initial'] ?? $studentInfo->middle_initial)
-        ? rtrim(($validated['middle_initial'] ?? $studentInfo->middle_initial), '.') . '.'
-        : '';
-      $lastName = $validated['surname'] ?? $studentInfo->surname;
-
-      $fullName = trim($lastName . ', ' . $firstName . ' ' . $middleInitial);
-      $userUpdates['account_name'] = $fullName;
-
-      if (!empty($userUpdates)) {
-        $user->update($userUpdates);
-      }
-
-      // ============================================================
-      // CHECK IF USER ALREADY EXISTS IN SMS DATABASE FOR THIS SCHOOL
-      // ============================================================
-      $userId = $studentInfo->emergency_contact_number;
-      $email = $studentInfo->parent_email;
-      $schoolCode = $studentInfo->school_code;
-      $existingSmsUser = null;
-      $smsUserCreated = false;
-
-      if (!empty($userId)) {
-        try {
-          // Check by user_id AND school_code
-          $existingSmsUser = DB::connection('sms_users')
-            ->table('users')
-            ->where('user_id', $userId)
-            ->where('school_code', $schoolCode)
-            ->first();
-
-          if (!$existingSmsUser) {
-            // Check by username AND school_code
-            $existingSmsUser = DB::connection('sms_users')
-              ->table('users')
-              ->where('username', $userId)
-              ->where('school_code', $schoolCode)
-              ->first();
-          }
-
-          Log::info('SMS User check', [
-            'user_id' => $userId,
-            'email' => $email,
-            'school_code' => $schoolCode,
-            'found' => $existingSmsUser ? 'Yes' : 'No'
-          ]);
-        } catch (\Exception $e) {
-          Log::error('Failed to check existing SMS user: ' . $e->getMessage());
-        }
-      } else {
-        Log::warning("No emergency contact number for student: {$studentInfo->student_id}");
-      }
-
-      // ============================================================
-      // TASK 13: Create OR UPDATE login credential in SMS users database
-      // ============================================================
-      try {
-        $this->syncSmsUser($studentInfo, $validated);
-        $smsUserCreated = true;
-      } catch (\Exception $e) {
-        Log::error('TASK 13 FAILED (SMS User): ' . $e->getMessage());
-      }
-
-      if ($smsUserCreated) {
-        $studentInfo->sms_app_credentials = 'yes';
-        $studentInfo->save();
-
-        // Update sms_app_created_at with same timestamp
-        DB::table('student_id_info')
-          ->where('student_id', $user->student_id)
-          ->where('school_code', $user->school_code)
-          ->update([
-            'sms_app_created_at' => $currentTimestamp
-          ]);
-
-        $studentInfo->refresh();
-        Log::info("Updated sms_app_credentials to 'yes' for student: {$studentInfo->student_id}");
-      }
-
-      // ============================================================
-      // TASK 14: Create student record in school-specific database
-      // ============================================================
-      try {
-        $this->syncStudentRecord($studentInfo, $validated);
-      } catch (\Exception $e) {
-        Log::error('TASK 14 FAILED (Student Record): ' . $e->getMessage());
-      }
-
-      // ============================================================
-      // TASK 15: Send email to parent/guardian
-      // Pass the original approval status to determine email content
-      // ============================================================
+      // ✅ KEEP EMAIL SENDING
       try {
         $this->sendParentEmail($studentInfo, $validated, $wasAlreadyApproved);
       } catch (\Exception $e) {
-        Log::error('TASK 15 FAILED (Email): ' . $e->getMessage());
+        Log::error('Failed to send email: ' . $e->getMessage());
       }
 
       $studentInfo->refresh();
+
+      $fullName = trim(
+        $studentInfo->first_name . ' ' .
+        ($studentInfo->middle_initial ? $studentInfo->middle_initial . '. ' : '') .
+        $studentInfo->surname .
+        ($studentInfo->suffix_name ? ' ' . $studentInfo->suffix_name : '')
+      );
 
       return new JsonResponse([
         'success' => true,
@@ -915,6 +802,8 @@ class StudentController extends Controller
           'parent_first_name' => $studentInfo->parent_first_name,
           'parent_surname' => $studentInfo->parent_surname,
           'parent_email' => $studentInfo->parent_email,
+          'esc_voucher_recipient' => $studentInfo->esc_voucher_recipient,
+          'esc_number' => $studentInfo->esc_number,
           'sms_app_credentials' => $studentInfo->sms_app_credentials,
           'sms_app_created_at' => $studentInfo->sms_app_created_at,
         ]
@@ -928,8 +817,6 @@ class StudentController extends Controller
       ], 422);
     } catch (\Throwable $th) {
       Log::error('Failed to update profile: ' . $th->getMessage());
-      Log::error('File: ' . $th->getFile() . ' Line: ' . $th->getLine());
-
       return new JsonResponse([
         'success' => false,
         'error' => 'Failed to update profile: ' . $th->getMessage()
@@ -1146,11 +1033,7 @@ class StudentController extends Controller
   }
 
   /**
-   * TASK 15: Send email to parent/guardian
-   * 
-   * Logic:
-   * a. First time submission (wasAlreadyApproved = false) -> show actual unhashed password
-   * b. 2nd or succeeding submission (wasAlreadyApproved = true) -> show "your 1st nominated password"
+   * Send email to parent/guardian
    * 
    * @param bool $wasAlreadyApproved Whether the record was already approved before this submission
    */
@@ -1171,19 +1054,14 @@ class StudentController extends Controller
 
       $username = $studentInfo->emergency_contact_number;
 
-      // ✅ Check if this is a resubmission (already approved before)
       if ($wasAlreadyApproved) {
-        // Scenario b: 2nd or succeeding submission
         $password = 'your 1st nominated password';
         Log::info('Resubmission - showing placeholder: ' . $studentInfo->student_id);
       } else {
-        // Scenario a: First time submission
-        // Check if password was actually submitted
         if (!empty($validated['password'])) {
           $password = $validated['password'];
           Log::info('First time submission with password - showing actual password: ' . $studentInfo->student_id);
         } else {
-          // This should not happen for first time, but as fallback
           $password = 'your nominated password';
           Log::warning('First time submission but no password provided: ' . $studentInfo->student_id);
         }
