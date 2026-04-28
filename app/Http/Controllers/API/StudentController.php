@@ -175,6 +175,78 @@ class StudentController extends Controller
   }
 
   /**
+   * Serve student image - returns base64 encoded image
+   * 
+   * @param Request $request
+   * @return JsonResponse
+   */
+  public function serveStudentImage(Request $request): JsonResponse
+  {
+    try {
+      $studentId = $request->query('student_id');
+      $surname = $request->query('surname');
+      $schoolCode = $request->query('school_code');
+
+      if (empty($studentId) || empty($surname) || empty($schoolCode)) {
+        return new JsonResponse([
+          'success' => false,
+          'error' => 'Missing required parameters'
+        ], 400);
+      }
+
+      // Clean parameters
+      $studentId = preg_replace('/[^a-zA-Z0-9]/', '', $studentId);
+      $surname = preg_replace('/[^a-zA-Z0-9]/', '', $surname);
+      $schoolCode = preg_replace('/[^a-zA-Z0-9]/', '', $schoolCode);
+
+      // Build path
+      $imagePath = base_path('../../public_html/idrs-school-ids/' . $schoolCode . '/vision/' . $studentId . '_' . $surname . '.jpg');
+
+      // Alternative paths
+      $paths = [
+        $imagePath,
+        base_path('../../public_html/idrs-school-ids/' . $schoolCode . '/vision/' . $studentId . '_' . $surname . '.jpeg'),
+        base_path('../../public_html/idrs-school-ids/' . $schoolCode . '/vision/' . $studentId . '.jpg'),
+        '/home/u141085058/domains/schoolmanagerph.com/public_html/idrs-school-ids/' . $schoolCode . '/vision/' . $studentId . '_' . $surname . '.jpg',
+      ];
+
+      $foundPath = null;
+      foreach ($paths as $path) {
+        if (file_exists($path)) {
+          $foundPath = $path;
+          break;
+        }
+      }
+
+      if (!$foundPath) {
+        return new JsonResponse([
+          'success' => false,
+          'error' => 'Image not found'
+        ], 404);
+      }
+
+      // Read and encode image
+      $imageData = base64_encode(file_get_contents($foundPath));
+      $mimeType = mime_content_type($foundPath);
+
+      return new JsonResponse([
+        'success' => true,
+        'data' => [
+          'image' => 'data:' . $mimeType . ';base64,' . $imageData,
+          'mime_type' => $mimeType
+        ]
+      ], 200);
+
+    } catch (\Exception $e) {
+      \Log::error('Error serving image: ' . $e->getMessage());
+      return new JsonResponse([
+        'success' => false,
+        'error' => 'Server error'
+      ], 500);
+    }
+  }
+
+  /**
    * Get student information list (for authenticated student)
    */
   public function student_information_lists(Request $request): JsonResponse

@@ -22,6 +22,8 @@ Route::post('/admin/login', [AuthenticationController::class, 'authenticate_admi
 // Footer Company
 Route::get('/footer', [TrademarkController::class, 'footer']);
 
+Route::get('/student-image', [StudentController::class, 'serveStudentImage']);
+
 Route::middleware(['auth:sanctum'])->group(function () {
 
   Route::get('/user-role', [AuthenticationController::class, 'user_role']);
