@@ -235,15 +235,17 @@
       <p>Please keep your account credentials safe. For security reasons, we recommend changing your password from time
         to time.</p>
 
+      <!-- ONLY THIS SECTION CHANGED - Everything else is the same -->
       <div class="links">
         <p><strong>You can download the SchoolMANAGER mobile app at:</strong><br>
-          <a href="#">WEBSITE LINK</a> and install it on your mobile android device.
+          <a href="{{ $app_download_link ?? '#' }}">WEBSITE LINK</a> and install it on your mobile android device.
         </p>
 
         <p><strong>You can also access the web app at:</strong><br>
           <a href="https://sms.schoolmanagerph.com">www.sms.schoolmanagerph.com</a>
         </p>
       </div>
+      <!-- END OF CHANGED SECTION -->
 
       <div class="note">
         ***Please do not reply to this email. This is an automated confirmation that we have received your Student ID

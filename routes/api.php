@@ -24,6 +24,29 @@ Route::get('/footer', [TrademarkController::class, 'footer']);
 
 Route::get('/student-image', [StudentController::class, 'serveStudentImage']);
 
+// Download route - forces download instead of opening in browser
+Route::get('/download-app', function () {
+  $filePath = public_path('downloads/schoolmanager-app.txt');
+
+  // Check if APK exists first
+  $apkPath = public_path('downloads/schoolmanager-app.apk');
+  if (file_exists($apkPath)) {
+    $filePath = $apkPath;
+    $filename = 'SchoolMANAGER-App.apk';
+    $mimeType = 'application/vnd.android.package-archive';
+  } elseif (file_exists($filePath)) {
+    $filename = 'SchoolMANAGER-App.txt';
+    $mimeType = 'text/plain';
+  } else {
+    abort(404, 'File not found');
+  }
+
+  return response()->download($filePath, $filename, [
+    'Content-Type' => $mimeType,
+    'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+  ]);
+})->name('download.app');
+
 Route::middleware(['auth:sanctum'])->group(function () {
 
   Route::get('/user-role', [AuthenticationController::class, 'user_role']);

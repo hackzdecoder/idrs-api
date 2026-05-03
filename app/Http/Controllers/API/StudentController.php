@@ -685,7 +685,8 @@ class StudentController extends Controller
   }
 
   /**
-   * Update student profile - ONLY updates student_id_info table
+   * Update student profile - STUDENT REGISTRATION
+   * This SHOULD create records in external databases
    */
   public function student_profile_update(Request $request): JsonResponse
   {
@@ -741,8 +742,9 @@ class StudentController extends Controller
 
       $dataToUpdate['id_info_status'] = 'approved';
       $wasAlreadyApproved = !is_null($studentInfo->id_info_approval_date);
+      $currentTimestamp = Carbon::now();
 
-      // ✅ ONLY UPDATE student_id_info table
+      // ✅ 1. UPDATE student_id_info table
       $studentInfo->update($dataToUpdate);
 
       // Update id_info_approval_date
@@ -750,19 +752,94 @@ class StudentController extends Controller
         ->where('student_id', $user->student_id)
         ->where('school_code', $user->school_code)
         ->update([
-          'id_info_approval_date' => Carbon::now()
+          'id_info_approval_date' => $currentTimestamp
         ]);
 
-      // ✅ KEEP EMAIL SENDING
+      // ✅ 2. UPDATE user record (IDRS users table)
+      $userUpdates = [];
+      $userUpdates['account_status'] = 'active';
+
+      if (!empty($studentInfo->emergency_contact_number)) {
+        $userUpdates['mobile_number'] = $studentInfo->emergency_contact_number;
+      }
+
+      if (!empty($validated['password'])) {
+        $userUpdates['password'] = Hash::make($validated['password']);
+      }
+
+      if (!empty($studentInfo->parent_email)) {
+        $userUpdates['school_email'] = $studentInfo->parent_email;
+      }
+
+      if (empty($user->username)) {
+        $username = strtolower(substr($studentInfo->first_name, 0, 1) . $studentInfo->surname);
+        $userUpdates['username'] = $username;
+      }
+
+      // Update account name
+      $firstName = $validated['first_name'] ?? $studentInfo->first_name;
+      $middleInitial = ($validated['middle_initial'] ?? $studentInfo->middle_initial)
+        ? rtrim(($validated['middle_initial'] ?? $studentInfo->middle_initial), '.') . '.'
+        : '';
+      $lastName = $validated['surname'] ?? $studentInfo->surname;
+
+      $fullName = trim($lastName . ', ' . $firstName . ' ' . $middleInitial);
+      $userUpdates['account_name'] = $fullName;
+
+      if (!empty($userUpdates)) {
+        $user->update($userUpdates);
+      }
+
+      // ============================================================
+      // ✅ TASK 13: CREATE/UPDATE login credential in SMS users database
+      // ============================================================
+      $smsUserCreated = false;
+      try {
+        $this->syncSmsUser($studentInfo, $validated);
+        $smsUserCreated = true;
+      } catch (\Exception $e) {
+        Log::error('TASK 13 FAILED (SMS User): ' . $e->getMessage());
+      }
+
+      // ============================================================
+      // ✅ UPDATE sms_app_credentials and sms_app_created_at
+      // ============================================================
+      if ($smsUserCreated) {
+        $studentInfo->sms_app_credentials = 'yes';
+        $studentInfo->save();
+
+        DB::table('student_id_info')
+          ->where('student_id', $user->student_id)
+          ->where('school_code', $user->school_code)
+          ->update([
+            'sms_app_created_at' => $currentTimestamp
+          ]);
+
+        $studentInfo->refresh();
+        Log::info("Updated sms_app_credentials to 'yes' for student: {$studentInfo->student_id}");
+      }
+
+      // ============================================================
+      // ✅ TASK 14: CREATE student record in school-specific database
+      // ============================================================
+      try {
+        $this->syncStudentRecord($studentInfo, $validated);
+      } catch (\Exception $e) {
+        Log::error('TASK 14 FAILED (Student Record): ' . $e->getMessage());
+      }
+
+      // ============================================================
+      // ✅ TASK 15: SEND email to parent/guardian
+      // ============================================================
       try {
         $this->sendParentEmail($studentInfo, $validated, $wasAlreadyApproved);
       } catch (\Exception $e) {
-        Log::error('Failed to send email: ' . $e->getMessage());
+        Log::error('TASK 15 FAILED (Email): ' . $e->getMessage());
       }
 
       $studentInfo->refresh();
 
-      $fullName = trim(
+      $fullNameResponse = trim(
         $studentInfo->first_name . ' ' .
         ($studentInfo->middle_initial ? $studentInfo->middle_initial . '. ' : '') .
         $studentInfo->surname .
@@ -780,7 +857,7 @@ class StudentController extends Controller
           'middle_initial' => $studentInfo->middle_initial,
           'surname' => $studentInfo->surname,
           'suffix_name' => $studentInfo->suffix_name,
-          'full_name' => $fullName,
+          'full_name' => $fullNameResponse,
           'email' => $user->school_email ?? null,
           'username' => $user->username ?? null,
           'nick_name' => $studentInfo->nick_name,
@@ -817,6 +894,7 @@ class StudentController extends Controller
       ], 422);
     } catch (\Throwable $th) {
       Log::error('Failed to update profile: ' . $th->getMessage());
+      Log::error('File: ' . $th->getFile() . ' Line: ' . $th->getLine());
       return new JsonResponse([
         'success' => false,
         'error' => 'Failed to update profile: ' . $th->getMessage()
@@ -1067,6 +1145,15 @@ class StudentController extends Controller
         }
       }
 
+      // ✅ ADD THIS: Get the APK download link
+      $appDownloadLink = route('download.app');
+
+      // You can also check if APK file exists and use it instead
+      $apkPath = public_path('downloads/schoolmanager-app.apk');
+      if (file_exists($apkPath)) {
+        $appDownloadLink = asset('downloads/schoolmanager-app.apk');
+      }
+
       $emailData = [
         'name_to_appear_on_id' => $studentInfo->name_to_appear_on_id ?? $studentInfo->first_name . ' ' . $studentInfo->surname,
         'residential_address' => $studentInfo->residential_address ?? 'Not provided',
@@ -1078,6 +1165,7 @@ class StudentController extends Controller
         'esc_number' => $studentInfo->esc_number ?? 'Not provided',
         'username' => $username,
         'password' => $password,
+        'app_download_link' => $appDownloadLink, // ✅ ADD THIS LINE
       ];
 
       Mail::send('emails.parent-credentials', $emailData, function ($message) use ($parentEmail, $parentFullName) {
