@@ -583,8 +583,8 @@ class StudentController extends Controller
 
   /**
    * Get all students list with filters using Query Scopes
-   * For Admin: filters by their school_code
-   * For Super Admin: shows all students
+   * For Admin: filters by their school_code (hardcoded, no filter parameter)
+   * For Super Admin: shows all students, can filter by school_code if provided
    */
   public function index(Request $request): JsonResponse
   {
@@ -593,7 +593,6 @@ class StudentController extends Controller
 
       $query = StudentIdInfo::query()
         ->withUser()
-        ->bySchoolCode($request->school_code)
         ->byStudentId($request->student_id)
         ->byStudentType($request->student_type)
         ->byLevel($request->level)
@@ -609,8 +608,14 @@ class StudentController extends Controller
         ->byEmail($request->email)
         ->latest();
 
+      // Admin: only see their own school (hardcoded restriction)
       if ($user && $user->user_role === 'Admin') {
         $query->where('school_code', $user->school_code);
+      }
+
+      // Super Admin: can filter by school_code if provided (from filter modal)
+      if ($user && $user->user_role === 'Super Admin' && $request->has('school_code') && !empty($request->school_code)) {
+        $query->where('school_code', $request->school_code);
       }
 
       $students = $query->get();
@@ -664,7 +669,6 @@ class StudentController extends Controller
           'id_reprint_date' => $student->id_reprint_date,
           'sms_app_credentials' => $student->sms_app_credentials,
           'sms_app_created_at' => $student->sms_app_created_at,
-          // ✅ ADD THESE TWO LINES:
           'parent_first_name' => $student->parent_first_name,
           'parent_surname' => $student->parent_surname,
         ];

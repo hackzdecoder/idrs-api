@@ -4,6 +4,7 @@ use App\Http\Controllers\API\AuthenticationController;
 use App\Http\Controllers\API\StudentController;
 use App\Http\Controllers\API\ProfileController;
 use App\Http\Controllers\API\TrademarkController;
+use App\Http\Controllers\API\SchoolController;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Route;
 
@@ -59,6 +60,12 @@ Route::middleware(['auth:sanctum'])->group(function () {
         'message' => 'Super Admin Dashboard',
       ], 200));
     });
+
+    // ✅ SCHOOL MANAGEMENT ROUTES (Added without breaking existing routes)
+    Route::get('/schools', [SchoolController::class, 'index']);
+    Route::post('/schools', [SchoolController::class, 'store']);
+    Route::get('/schools/{id}', [SchoolController::class, 'show']);
+    Route::put('/schools/{id}', [SchoolController::class, 'update']);
   });
 
   // ===== ADMIN & SUPER ADMIN =====
