@@ -583,13 +583,15 @@ class StudentController extends Controller
 
   /**
    * Get all students list with filters using Query Scopes
-   * For Admin: filters by their school_code (hardcoded, no filter parameter)
+   * For Admin: filters by their school_code
+   * If pending_only=true, only shows pending class_details_status
    * For Super Admin: shows all students, can filter by school_code if provided
    */
   public function index(Request $request): JsonResponse
   {
     try {
       $user = $request->user();
+      $userRole = $user->user_role ?? null;
 
       $query = StudentIdInfo::query()
         ->withUser()
@@ -608,13 +610,19 @@ class StudentController extends Controller
         ->byEmail($request->email)
         ->latest();
 
-      // Admin: only see their own school (hardcoded restriction)
-      if ($user && $user->user_role === 'Admin') {
+      // FOR SCHOOL ADMIN: Only show their school
+      if ($userRole === 'Admin') {
         $query->where('school_code', $user->school_code);
+
+        // ONLY apply pending filter if 'pending_only' parameter is 'true'
+        // This allows Dashboard to show ALL records, Profile to show only pending
+        if ($request->has('pending_only') && $request->pending_only === 'true') {
+          $query->where('class_details_status', 'pending');
+        }
       }
 
-      // Super Admin: can filter by school_code if provided (from filter modal)
-      if ($user && $user->user_role === 'Super Admin' && $request->has('school_code') && !empty($request->school_code)) {
+      // FOR SUPER ADMIN: can filter by school_code if provided
+      if ($userRole === 'Super Admin' && $request->has('school_code') && !empty($request->school_code)) {
         $query->where('school_code', $request->school_code);
       }
 
@@ -671,6 +679,7 @@ class StudentController extends Controller
           'sms_app_created_at' => $student->sms_app_created_at,
           'parent_first_name' => $student->parent_first_name,
           'parent_surname' => $student->parent_surname,
+          'account_status' => $student->user->account_status ?? 'active',
         ];
       });
 
@@ -680,10 +689,10 @@ class StudentController extends Controller
       ], 200);
 
     } catch (\Throwable $th) {
-      Log::error('Failed to fetch students: ' . $th->getMessage());
+      \Log::error('Failed to fetch students: ' . $th->getMessage());
       return new JsonResponse([
         'success' => false,
-        'error' => 'Failed to fetch students'
+        'error' => 'Failed to fetch students: ' . $th->getMessage()
       ], 500);
     }
   }
