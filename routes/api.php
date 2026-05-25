@@ -66,6 +66,14 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/schools', [SchoolController::class, 'store']);
     Route::get('/schools/{id}', [SchoolController::class, 'show']);
     Route::put('/schools/{id}', [SchoolController::class, 'update']);
+
+    // Inside super-admin group, add these routes:
+    Route::get('/users', [AuthenticationController::class, 'getAdminUsers']);
+    Route::post('/users', [AuthenticationController::class, 'createAdminUser']);
+    Route::get('/users/{id}', [AuthenticationController::class, 'getAdminUser']);
+    Route::put('/users/{id}', [AuthenticationController::class, 'updateAdminUser']);
+    Route::post('/users/{id}/reset-password', [AuthenticationController::class, 'resetAdminUserPassword']);
+    Route::get('/schools-list', [AuthenticationController::class, 'getSchoolsList']);
   });
 
   // ===== ADMIN & SUPER ADMIN =====

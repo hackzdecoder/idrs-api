@@ -414,4 +414,404 @@ class AuthenticationController extends Controller
       ], 500);
     }
   }
+
+  // ============================================================
+  // ✅ NEW FUNCTIONS ADDED BELOW - DO NOT MODIFY ABOVE CODE
+  // ============================================================
+
+  /**
+   * Get all Admin users (Super Admin only)
+   */
+  public function getAdminUsers(Request $request): JsonResponse
+  {
+    try {
+      $user = $request->user();
+
+      // Only Super Admin can access
+      if (!$user || $user->user_role !== 'Super Admin') {
+        return new JsonResponse([
+          'success' => false,
+          'error' => 'Unauthorized. Super Admin access required.'
+        ], 403);
+      }
+
+      $query = User::where('user_role', 'Admin');
+
+      // Search by username, email, or account name
+      if ($request->has('search') && !empty($request->search)) {
+        $search = $request->search;
+        $query->where(function ($q) use ($search) {
+          $q->where('username', 'like', "%{$search}%")
+            ->orWhere('school_email', 'like', "%{$search}%")
+            ->orWhere('account_name', 'like', "%{$search}%");
+        });
+      }
+
+      // Filter by account status
+      if ($request->has('account_status') && !empty($request->account_status)) {
+        $query->where('account_status', $request->account_status);
+      }
+
+      // Filter by school_code
+      if ($request->has('school_code') && !empty($request->school_code)) {
+        $query->where('school_code', $request->school_code);
+      }
+
+      // ✅ Force order by id DESC (newest users have highest ID)
+      // This works even if created_at is NULL
+      $admins = $query->orderBy('created_at', 'desc')->orderBy('id', 'desc')->get();
+
+      return new JsonResponse([
+        'success' => true,
+        'data' => $admins
+      ], 200);
+
+    } catch (\Throwable $th) {
+      \Log::error('Failed to fetch admin users: ' . $th->getMessage());
+      return new JsonResponse([
+        'success' => false,
+        'error' => 'Failed to fetch admin users: ' . $th->getMessage()
+      ], 500);
+    }
+  }
+
+  /**
+   * Create a new Admin user (Super Admin only)
+   */
+  public function createAdminUser(Request $request): JsonResponse
+  {
+    try {
+      $user = $request->user();
+
+      // Only Super Admin can access
+      if (!$user || $user->user_role !== 'Super Admin') {
+        return new JsonResponse([
+          'success' => false,
+          'error' => 'Unauthorized. Super Admin access required.'
+        ], 403);
+      }
+
+      // Validation rules
+      $rules = [
+        'username' => 'required|string|max:255|unique:users,username',
+        'school_email' => 'required|email|max:255|unique:users,school_email',
+        'account_name' => 'required|string|max:255',
+        'school_code' => 'required|string|max:50|exists:school_id,school_code',
+        'mobile_number' => 'nullable|string|max:20',
+        'password' => 'required|string|min:8',
+        'account_status' => 'required|in:active,inactive',
+      ];
+
+      $messages = [
+        'username.required' => 'Username is required',
+        'username.unique' => 'Username already exists',
+        'school_email.required' => 'Email is required',
+        'school_email.email' => 'Invalid email format',
+        'school_email.unique' => 'Email already exists',
+        'account_name.required' => 'Full name is required',
+        'school_code.required' => 'School is required',
+        'school_code.exists' => 'School not found',
+        'password.required' => 'Password is required',
+        'password.min' => 'Password must be at least 8 characters',
+        'account_status.required' => 'Account status is required',
+        'account_status.in' => 'Invalid account status',
+      ];
+
+      $validated = $request->validate($rules, $messages);
+
+      // Get current timestamp for created_at
+      $now = Carbon::now('Asia/Manila');
+
+      // Create the admin user
+      $newAdmin = User::create([
+        'username' => $validated['username'],
+        'school_email' => $validated['school_email'],
+        'account_name' => $validated['account_name'],
+        'school_code' => $validated['school_code'],
+        'mobile_number' => $validated['mobile_number'] ?? null,
+        'password' => Hash::make($validated['password']),
+        'user_role' => 'Admin',
+        'account_status' => $validated['account_status'],
+        'created_at' => $now,  // ✅ Set created_at
+        // student_id is NOT included - will use database default
+      ]);
+
+      \Log::info('Admin user created successfully', [
+        'user_id' => $newAdmin->id,
+        'username' => $newAdmin->username,
+        'school_code' => $newAdmin->school_code,
+        'created_at' => $now,
+        'created_by' => $user->id
+      ]);
+
+      // Return the created user (without password)
+      $newAdminData = $newAdmin->toArray();
+      unset($newAdminData['password']);
+
+      return new JsonResponse([
+        'success' => true,
+        'data' => $newAdminData,
+        'message' => 'Admin user created successfully'
+      ], 201);
+
+    } catch (\Illuminate\Validation\ValidationException $e) {
+      return new JsonResponse([
+        'success' => false,
+        'error' => 'Validation failed',
+        'errors' => $e->errors()
+      ], 422);
+    } catch (\Illuminate\Database\QueryException $e) {
+      \Log::error('Database Error: ' . $e->getMessage());
+
+      if (str_contains($e->getMessage(), 'Duplicate entry')) {
+        if (str_contains($e->getMessage(), 'username')) {
+          return new JsonResponse([
+            'success' => false,
+            'error' => 'Username already exists'
+          ], 422);
+        }
+        if (str_contains($e->getMessage(), 'school_email')) {
+          return new JsonResponse([
+            'success' => false,
+            'error' => 'Email already exists'
+          ], 422);
+        }
+      }
+
+      return new JsonResponse([
+        'success' => false,
+        'error' => 'Database error: ' . $e->getMessage()
+      ], 500);
+    } catch (\Exception $e) {
+      \Log::error('Failed to create admin user: ' . $e->getMessage());
+      return new JsonResponse([
+        'success' => false,
+        'error' => 'Failed to create admin user: ' . $e->getMessage()
+      ], 500);
+    }
+  }
+
+  /**
+   * Get single Admin user by ID (Super Admin only)
+   */
+  public function getAdminUser($id, Request $request): JsonResponse
+  {
+    try {
+      $user = $request->user();
+
+      // Only Super Admin can access
+      if (!$user || $user->user_role !== 'Super Admin') {
+        return new JsonResponse([
+          'success' => false,
+          'error' => 'Unauthorized. Super Admin access required.'
+        ], 403);
+      }
+
+      $admin = User::where('id', $id)->where('user_role', 'Admin')->first();
+
+      if (!$admin) {
+        return new JsonResponse([
+          'success' => false,
+          'error' => 'Admin user not found'
+        ], 404);
+      }
+
+      return new JsonResponse([
+        'success' => true,
+        'data' => $admin
+      ], 200);
+
+    } catch (\Throwable $th) {
+      \Log::error('Failed to fetch admin user: ' . $th->getMessage());
+      return new JsonResponse([
+        'success' => false,
+        'error' => 'Failed to fetch admin user'
+      ], 500);
+    }
+  }
+
+  /**
+   * Update Admin user (Super Admin only)
+   */
+  public function updateAdminUser($id, Request $request): JsonResponse
+  {
+    try {
+      $user = $request->user();
+
+      if (!$user || $user->user_role !== 'Super Admin') {
+        return new JsonResponse([
+          'success' => false,
+          'error' => 'Unauthorized. Super Admin access required.'
+        ], 403);
+      }
+
+      $admin = User::where('id', $id)->where('user_role', 'Admin')->first();
+
+      if (!$admin) {
+        return new JsonResponse([
+          'success' => false,
+          'error' => 'Admin user not found'
+        ], 404);
+      }
+
+      $validated = $request->validate([
+        'username' => [
+          'required',
+          'string',
+          'max:255',
+          \Illuminate\Validation\Rule::unique('users', 'username')->ignore($id)
+        ],
+        'school_email' => [
+          'required',
+          'email',
+          'max:255',
+          \Illuminate\Validation\Rule::unique('users', 'school_email')->ignore($id)
+        ],
+        'account_name' => 'required|string|max:255',
+        'school_code' => 'required|string|max:50',
+        'mobile_number' => 'nullable|string|max:20',
+        'account_status' => 'required|in:active,inactive',
+      ]);
+
+      // Check if school exists
+      $school = DB::table('school_id')->where('school_code', $validated['school_code'])->first();
+      if (!$school) {
+        return new JsonResponse([
+          'success' => false,
+          'error' => 'School not found. Please check the school code.'
+        ], 422);
+      }
+
+      // Update the admin user
+      $admin->update([
+        'username' => $validated['username'],
+        'school_email' => $validated['school_email'],
+        'account_name' => $validated['account_name'],
+        'school_code' => $validated['school_code'],
+        'mobile_number' => $validated['mobile_number'] ?? null,
+        'account_status' => $validated['account_status'],
+      ]);
+
+      \Log::info('Admin user updated', [
+        'user_id' => $admin->id,
+        'username' => $admin->username,
+        'updated_by' => $user->id
+      ]);
+
+      $adminData = $admin->toArray();
+      unset($adminData['password']);
+
+      return new JsonResponse([
+        'success' => true,
+        'data' => $adminData,
+        'message' => 'Admin user updated successfully'
+      ], 200);
+
+    } catch (\Illuminate\Validation\ValidationException $e) {
+      return new JsonResponse([
+        'success' => false,
+        'error' => 'Validation failed',
+        'errors' => $e->errors()
+      ], 422);
+    } catch (\Exception $e) {
+      \Log::error('Failed to update admin user: ' . $e->getMessage());
+      return new JsonResponse([
+        'success' => false,
+        'error' => 'Failed to update admin user: ' . $e->getMessage()
+      ], 500);
+    }
+  }
+
+  /**
+   * Reset Admin user password (Super Admin only)
+   */
+  public function resetAdminUserPassword($id, Request $request): JsonResponse
+  {
+    try {
+      $user = $request->user();
+
+      // Only Super Admin can access
+      if (!$user || $user->user_role !== 'Super Admin') {
+        return new JsonResponse([
+          'success' => false,
+          'error' => 'Unauthorized. Super Admin access required.'
+        ], 403);
+      }
+
+      $admin = User::where('id', $id)->where('user_role', 'Admin')->first();
+
+      if (!$admin) {
+        return new JsonResponse([
+          'success' => false,
+          'error' => 'Admin user not found'
+        ], 404);
+      }
+
+      $validated = $request->validate([
+        'password' => 'required|string|min:8',
+      ]);
+
+      $admin->password = Hash::make($validated['password']);
+      $admin->save();
+
+      \Log::info('Password reset for admin user', [
+        'user_id' => $admin->id,
+        'username' => $admin->username,
+        'reset_by' => $user->id
+      ]);
+
+      return new JsonResponse([
+        'success' => true,
+        'message' => 'Password reset successfully'
+      ], 200);
+
+    } catch (\Illuminate\Validation\ValidationException $e) {
+      return new JsonResponse([
+        'success' => false,
+        'error' => 'Validation failed',
+        'errors' => $e->errors()
+      ], 422);
+    } catch (\Exception $e) {
+      \Log::error('Failed to reset password: ' . $e->getMessage());
+      return new JsonResponse([
+        'success' => false,
+        'error' => 'Failed to reset password: ' . $e->getMessage()
+      ], 500);
+    }
+  }
+
+  /**
+   * Get all schools for dropdown (Super Admin only)
+   */
+  public function getSchoolsList(Request $request): JsonResponse
+  {
+    try {
+      $user = $request->user();
+
+      // Only Super Admin can access
+      if (!$user || $user->user_role !== 'Super Admin') {
+        return new JsonResponse([
+          'success' => false,
+          'error' => 'Unauthorized. Super Admin access required.'
+        ], 403);
+      }
+
+      $schools = DB::table('school_id')
+        ->select('school_code', 'school_name')
+        ->orderBy('school_name')
+        ->get();
+
+      return new JsonResponse([
+        'success' => true,
+        'data' => $schools
+      ], 200);
+
+    } catch (\Throwable $th) {
+      \Log::error('Failed to fetch schools list: ' . $th->getMessage());
+      return new JsonResponse([
+        'success' => false,
+        'error' => 'Failed to fetch schools'
+      ], 500);
+    }
+  }
 }

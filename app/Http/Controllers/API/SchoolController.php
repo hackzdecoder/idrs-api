@@ -26,7 +26,10 @@ class SchoolController extends Controller
         $query->where('school_name', 'like', '%' . $request->school_name . '%');
       }
 
-      $schools = $query->orderBy('school_name', 'asc')->get();
+      // ✅ Order by id DESC (newest schools first)
+      // If you have created_at column in school_id table, use:
+      $schools = $query->orderBy('id', 'desc')->get();
+      // OR if you have created_at: $query->latest('created_at')->get();
 
       // Add full URL for logo
       $schools->transform(function ($school) {
