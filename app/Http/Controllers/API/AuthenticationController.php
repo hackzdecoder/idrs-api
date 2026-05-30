@@ -136,7 +136,7 @@ class AuthenticationController extends Controller
         $user = User::where('student_id', $request->student_id)
           ->where('school_code', $request->school_code)
           ->where('mobile_number', $request->mobile_no)
-          ->where('user_role', 'Student')  // ✅ Prevents Super Admin/Admin from student login
+          ->where('user_role', 'Student')
           ->first();
 
         if (!$user) {
@@ -166,9 +166,9 @@ class AuthenticationController extends Controller
 
         // Check id_info_status to determine redirect
         if ($studentInfo && strtolower($studentInfo->id_info_status) === 'pending') {
-          $redirectTo = '/profile'; // Redirect to profile page for pending approval
+          $redirectTo = '/profile';
         } else {
-          $redirectTo = '/'; // Redirect to dashboard for approved/completed
+          $redirectTo = '/';
         }
       }
 
@@ -180,7 +180,7 @@ class AuthenticationController extends Controller
         ], 403);
       }
 
-      // ✅ TASKS 3 & 4: Fix last_successful_login timestamp (matching working pattern)
+      // ✅ TASKS 3 & 4: Fix last_successful_login timestamp
       $currentTimestamp = Carbon::now();
       DB::table('users')
         ->where('id', $user->id)
@@ -222,8 +222,6 @@ class AuthenticationController extends Controller
         $userData['student_id'] = $user->student_id;
         $userData['school_code'] = $user->school_code;
         $userData['redirect_to'] = $redirectTo;
-
-        // ✅ TASK 1: Add SMS registration status to login response
         $userData['sms_registered'] = $smsStatus['is_registered'];
         $userData['sms_credentials_exist'] = $smsStatus['has_credentials'];
 
@@ -416,7 +414,7 @@ class AuthenticationController extends Controller
   }
 
   // ============================================================
-  // ✅ NEW FUNCTIONS ADDED BELOW - DO NOT MODIFY ABOVE CODE
+  // ✅ USER MANAGEMENT FUNCTIONS
   // ============================================================
 
   /**
@@ -427,7 +425,6 @@ class AuthenticationController extends Controller
     try {
       $user = $request->user();
 
-      // Only Super Admin can access
       if (!$user || $user->user_role !== 'Super Admin') {
         return new JsonResponse([
           'success' => false,
@@ -437,7 +434,6 @@ class AuthenticationController extends Controller
 
       $query = User::where('user_role', 'Admin');
 
-      // Search by username, email, or account name
       if ($request->has('search') && !empty($request->search)) {
         $search = $request->search;
         $query->where(function ($q) use ($search) {
@@ -447,18 +443,14 @@ class AuthenticationController extends Controller
         });
       }
 
-      // Filter by account status
       if ($request->has('account_status') && !empty($request->account_status)) {
         $query->where('account_status', $request->account_status);
       }
 
-      // Filter by school_code
       if ($request->has('school_code') && !empty($request->school_code)) {
         $query->where('school_code', $request->school_code);
       }
 
-      // ✅ Force order by id DESC (newest users have highest ID)
-      // This works even if created_at is NULL
       $admins = $query->orderBy('created_at', 'desc')->orderBy('id', 'desc')->get();
 
       return new JsonResponse([
@@ -476,14 +468,13 @@ class AuthenticationController extends Controller
   }
 
   /**
-   * Create a new Admin user (Super Admin only)
+   * Create a new Admin user (Super Admin only) - WITHOUT MOBILE NUMBER
    */
   public function createAdminUser(Request $request): JsonResponse
   {
     try {
       $user = $request->user();
 
-      // Only Super Admin can access
       if (!$user || $user->user_role !== 'Super Admin') {
         return new JsonResponse([
           'success' => false,
@@ -491,13 +482,11 @@ class AuthenticationController extends Controller
         ], 403);
       }
 
-      // Validation rules
       $rules = [
         'username' => 'required|string|max:255|unique:users,username',
         'school_email' => 'required|email|max:255|unique:users,school_email',
         'account_name' => 'required|string|max:255',
         'school_code' => 'required|string|max:50|exists:school_id,school_code',
-        'mobile_number' => 'nullable|string|max:20',
         'password' => 'required|string|min:8',
         'account_status' => 'required|in:active,inactive',
       ];
@@ -519,21 +508,17 @@ class AuthenticationController extends Controller
 
       $validated = $request->validate($rules, $messages);
 
-      // Get current timestamp for created_at
       $now = Carbon::now('Asia/Manila');
 
-      // Create the admin user
       $newAdmin = User::create([
         'username' => $validated['username'],
         'school_email' => $validated['school_email'],
         'account_name' => $validated['account_name'],
         'school_code' => $validated['school_code'],
-        'mobile_number' => $validated['mobile_number'] ?? null,
         'password' => Hash::make($validated['password']),
         'user_role' => 'Admin',
         'account_status' => $validated['account_status'],
-        'created_at' => $now,  // ✅ Set created_at
-        // student_id is NOT included - will use database default
+        'created_at' => $now,
       ]);
 
       \Log::info('Admin user created successfully', [
@@ -544,7 +529,6 @@ class AuthenticationController extends Controller
         'created_by' => $user->id
       ]);
 
-      // Return the created user (without password)
       $newAdminData = $newAdmin->toArray();
       unset($newAdminData['password']);
 
@@ -599,7 +583,6 @@ class AuthenticationController extends Controller
     try {
       $user = $request->user();
 
-      // Only Super Admin can access
       if (!$user || $user->user_role !== 'Super Admin') {
         return new JsonResponse([
           'success' => false,
@@ -631,7 +614,7 @@ class AuthenticationController extends Controller
   }
 
   /**
-   * Update Admin user (Super Admin only)
+   * Update Admin user (Super Admin only) - WITHOUT MOBILE NUMBER
    */
   public function updateAdminUser($id, Request $request): JsonResponse
   {
@@ -669,11 +652,9 @@ class AuthenticationController extends Controller
         ],
         'account_name' => 'required|string|max:255',
         'school_code' => 'required|string|max:50',
-        'mobile_number' => 'nullable|string|max:20',
         'account_status' => 'required|in:active,inactive',
       ]);
 
-      // Check if school exists
       $school = DB::table('school_id')->where('school_code', $validated['school_code'])->first();
       if (!$school) {
         return new JsonResponse([
@@ -682,13 +663,11 @@ class AuthenticationController extends Controller
         ], 422);
       }
 
-      // Update the admin user
       $admin->update([
         'username' => $validated['username'],
         'school_email' => $validated['school_email'],
         'account_name' => $validated['account_name'],
         'school_code' => $validated['school_code'],
-        'mobile_number' => $validated['mobile_number'] ?? null,
         'account_status' => $validated['account_status'],
       ]);
 
@@ -730,7 +709,6 @@ class AuthenticationController extends Controller
     try {
       $user = $request->user();
 
-      // Only Super Admin can access
       if (!$user || $user->user_role !== 'Super Admin') {
         return new JsonResponse([
           'success' => false,
@@ -788,7 +766,6 @@ class AuthenticationController extends Controller
     try {
       $user = $request->user();
 
-      // Only Super Admin can access
       if (!$user || $user->user_role !== 'Super Admin') {
         return new JsonResponse([
           'success' => false,
