@@ -19,17 +19,15 @@ class SchoolController extends Controller
       $query = SchoolId::query();
 
       if ($request->has('school_code') && !empty($request->school_code)) {
-        $query->where('school_code', 'like', '%' . $request->school_code . '%');
+        $query->bySchoolCode($request->school_code);
       }
 
       if ($request->has('school_name') && !empty($request->school_name)) {
-        $query->where('school_name', 'like', '%' . $request->school_name . '%');
+        $query->bySchoolName($request->school_name);
       }
 
-      // ✅ Order by id DESC (newest schools first)
-      // If you have created_at column in school_id table, use:
+      // ✅ ORDER BY id DESC - Newest schools first (highest ID = newest)
       $schools = $query->orderBy('id', 'desc')->get();
-      // OR if you have created_at: $query->latest('created_at')->get();
 
       // Add full URL for logo
       $schools->transform(function ($school) {
@@ -60,7 +58,7 @@ class SchoolController extends Controller
         'school_code' => 'required|string|max:50|unique:school_id,school_code',
         'school_name' => 'required|string|max:255',
         'school_email' => 'required|email|max:255|unique:school_id,school_email',
-        'school_logo' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
+        'school_logo' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048', // ✅ nullable
       ]);
 
       $logoFileName = null;
@@ -69,15 +67,10 @@ class SchoolController extends Controller
         $extension = $file->getClientOriginalExtension();
         $logoFileName = strtolower($validated['school_code']) . '.' . $extension;
 
-        // Define the path
         $destinationPath = public_path('assets/school-logo');
-
-        // Create directory if it doesn't exist
         if (!File::exists($destinationPath)) {
           File::makeDirectory($destinationPath, 0755, true);
         }
-
-        // Move the file
         $file->move($destinationPath, $logoFileName);
       }
 
@@ -85,7 +78,7 @@ class SchoolController extends Controller
         'school_code' => $validated['school_code'],
         'school_name' => $validated['school_name'],
         'school_email' => $validated['school_email'],
-        'school_logo' => $logoFileName,
+        'school_logo' => $logoFileName, // ✅ Can be null
       ]);
 
       if ($school->school_logo) {
@@ -98,17 +91,11 @@ class SchoolController extends Controller
         'message' => 'School created successfully'
       ], 201);
 
-    } catch (\Illuminate\Validation\ValidationException $e) {
+    } catch (\Throwable $th) {
+      Log::error('Failed to create school: ' . $th->getMessage());
       return new JsonResponse([
         'success' => false,
-        'error' => 'Validation failed',
-        'errors' => $e->errors()
-      ], 422);
-    } catch (\Exception $e) {
-      Log::error('Failed to create school: ' . $e->getMessage());
-      return new JsonResponse([
-        'success' => false,
-        'error' => 'Failed to create school: ' . $e->getMessage()
+        'error' => 'Failed to create school: ' . $th->getMessage()
       ], 500);
     }
   }
