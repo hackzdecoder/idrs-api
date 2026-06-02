@@ -21,7 +21,8 @@ Route::post('/student/login', [AuthenticationController::class, 'authenticate_st
 Route::post('/admin/login', [AuthenticationController::class, 'authenticate_admin']);
 
 // Footer Company
-Route::get('/footer', [TrademarkController::class, 'footer']);
+Route::get('/footer', [TrademarkController::class, 'footer']);        // ✅ Footer uses this
+Route::post('/trademarks', [TrademarkController::class, 'getTrademarkInfo']); // ✅ Legal content uses this
 
 Route::get('/student-image', [StudentController::class, 'serveStudentImage']);
 

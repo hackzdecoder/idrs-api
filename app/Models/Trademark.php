@@ -13,7 +13,7 @@ class Trademark extends Model
   protected $table = 'companies';
 
   protected $fillable = [
-    'copyright_name',
+    'copyright',
     'company_name',
     'publication_date',
   ];
