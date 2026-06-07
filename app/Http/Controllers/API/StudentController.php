@@ -1178,7 +1178,7 @@ class StudentController extends Controller
         'esc_number' => $studentInfo->esc_number ?? 'Not provided',
         'username' => $username,
         'password' => $password,
-        'app_download_link' => $appDownloadLink, // ✅ ADD THIS LINE
+        'app_download_link' => $appDownloadLink,
       ];
 
       Mail::send('emails.parent-credentials', $emailData, function ($message) use ($parentEmail, $parentFullName) {

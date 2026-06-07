@@ -155,18 +155,9 @@ class AuthenticationController extends Controller
         // ✅ TASK 1: Check SMS registration status with mobile number AND school code
         $smsStatus = $this->checkSmsRegistrationStatus($request->mobile_no, $request->school_code);
 
-        // Log the result for debugging
-        \Log::info('SMS Registration Check Result', [
-          'student_id' => $request->student_id,
-          'mobile_number' => $request->mobile_no,
-          'school_code' => $request->school_code,
-          'is_registered' => $smsStatus['is_registered'],
-          'has_credentials' => $smsStatus['has_credentials']
-        ]);
-
         // Check id_info_status to determine redirect
         if ($studentInfo && strtolower($studentInfo->id_info_status) === 'pending') {
-          $redirectTo = '/profile';
+          $redirectTo = '/student-profile';
         } else {
           $redirectTo = '/';
         }
