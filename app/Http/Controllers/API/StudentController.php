@@ -91,6 +91,7 @@ class StudentController extends Controller
           'section_course' => $studentInfo->section_course,
           'lrn' => $studentInfo->lrn,
           'student_type' => $studentInfo->student_type,
+          // 'esc_voucher_recipient' => $studentInfo->esc_voucher_recipient,
           'esc_voucher_recipient' => $studentInfo->esc_voucher_recipient,
           'esc_number' => $studentInfo->esc_number,
           'parent_first_name' => $studentInfo->parent_first_name,
@@ -375,7 +376,7 @@ class StudentController extends Controller
         'level' => 'nullable|string|max:255',
         'section_course' => 'nullable|string|max:255',
         'lrn' => 'nullable|string|max:255',
-        'esc_voucher_recipient' => 'nullable|boolean',
+        'esc_voucher_recipient' => 'nullable|string|in:Yes,No',
         'esc_number' => 'nullable|string|max:255',
         'class_details_status' => 'nullable|string|in:pending,approved',
       ]);
@@ -393,7 +394,7 @@ class StudentController extends Controller
         $updateData['lrn'] = $validated['lrn'];
       }
       if ($request->has('esc_voucher_recipient')) {
-        $updateData['esc_voucher_recipient'] = filter_var($validated['esc_voucher_recipient'], FILTER_VALIDATE_BOOLEAN);
+        $updateData['esc_voucher_recipient'] = $validated['esc_voucher_recipient'] === 'Yes';
       }
       if ($request->has('esc_number')) {
         $updateData['esc_number'] = $validated['esc_number'];
@@ -433,7 +434,7 @@ class StudentController extends Controller
           'level' => $studentInfo->level,
           'section_course' => $studentInfo->section_course,
           'lrn' => $studentInfo->lrn,
-          'esc_voucher_recipient' => (bool) $studentInfo->esc_voucher_recipient,
+          'esc_voucher_recipient' => $studentInfo->esc_voucher_recipient,
           'esc_number' => $studentInfo->esc_number,
           'class_details_status' => $studentInfo->class_details_status,
           'class_details_approval_date' => $studentInfo->class_details_approval_date,
@@ -739,7 +740,7 @@ class StudentController extends Controller
         'parent_surname' => 'nullable|string|max:255',
         'parent_email' => 'nullable|email|max:255',
         'name_to_appear_on_id' => 'nullable|string|max:255',
-        'esc_voucher_recipient' => 'nullable|boolean',
+        'esc_voucher_recipient' => 'nullable|string|in:Yes,No',
         'esc_number' => 'nullable|string|max:255',
         'password' => 'nullable|string|min:8',
       ]);
@@ -751,6 +752,10 @@ class StudentController extends Controller
         } else {
           $dataToUpdate[$key] = $value;
         }
+      }
+
+      if ($request->has('esc_voucher_recipient')) {
+        $dataToUpdate['esc_voucher_recipient'] = $validated['esc_voucher_recipient'] === 'Yes' ? 'yes' : 'no';
       }
 
       $dataToUpdate['id_info_status'] = 'approved';
@@ -1158,13 +1163,11 @@ class StudentController extends Controller
         }
       }
 
-      // ✅ ADD THIS: Get the APK download link
       $appDownloadLink = route('download.app');
 
-      // You can also check if APK file exists and use it instead
-      $apkPath = public_path('downloads/schoolmanager-app.apk');
+      $apkPath = public_path('downloads/mobileapp/schoolmanager-app.apk');
       if (file_exists($apkPath)) {
-        $appDownloadLink = asset('downloads/schoolmanager-app.apk');
+        $appDownloadLink = asset('downloads/mobileapp/schoolmanager-app.apk');
       }
 
       $emailData = [

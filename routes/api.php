@@ -30,8 +30,8 @@ Route::get('/student-image', [StudentController::class, 'serveStudentImage']);
 Route::get('/download-app', function () {
   $filePath = public_path('downloads/schoolmanager-app.txt');
 
-  // Check if APK exists first
-  $apkPath = public_path('downloads/schoolmanager-app.apk');
+  // Check if APK exists first - UPDATED PATH
+  $apkPath = public_path('downloads/mobileapp/schoolmanager-app.apk');
   if (file_exists($apkPath)) {
     $filePath = $apkPath;
     $filename = 'SchoolMANAGER-App.apk';

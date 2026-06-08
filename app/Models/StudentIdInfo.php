@@ -66,7 +66,6 @@ class StudentIdInfo extends Model
     'sms_app_created_at' => 'datetime',
     'created_at' => 'datetime',
     'id_reprint_count' => 'integer',
-    'esc_voucher_recipient' => 'boolean',
   ];
 
   protected $hidden = [];
