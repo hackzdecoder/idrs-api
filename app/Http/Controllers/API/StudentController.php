@@ -1165,9 +1165,9 @@ class StudentController extends Controller
 
       $appDownloadLink = route('download.app');
 
-      $apkPath = public_path('downloads/mobileapp/schoolmanager-app.apk');
+      $apkPath = public_path('downloads/mobileapp/SchoolMANAGER-App.apk');
       if (file_exists($apkPath)) {
-        $appDownloadLink = asset('downloads/mobileapp/schoolmanager-app.apk');
+        $appDownloadLink = asset('downloads/mobileapp/SchoolMANAGER-App.apk');
       }
 
       $emailData = [
