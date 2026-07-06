@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Http\JsonResponse;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Log;
 
 class AuthenticationController extends Controller
 {
@@ -66,7 +67,7 @@ class AuthenticationController extends Controller
         'has_credentials' => $hasCredentials
       ];
     } catch (\Exception $e) {
-      \Log::error('Failed to check SMS registration status: ' . $e->getMessage());
+      Log::error('Failed to check SMS registration status: ' . $e->getMessage());
       return [
         'is_registered' => false,
         'has_credentials' => false
@@ -179,7 +180,7 @@ class AuthenticationController extends Controller
           'last_successful_login' => $currentTimestamp
         ]);
 
-      \Log::info('Timestamp Debug:', [
+      Log::info('Timestamp Debug:', [
         'carbon_now' => Carbon::now()->toDateTimeString(),
         'carbon_asia' => Carbon::now('Asia/Manila')->toDateTimeString(),
         'php_timezone' => date_default_timezone_get(),
@@ -260,7 +261,7 @@ class AuthenticationController extends Controller
       return $response;
 
     } catch (\Throwable $th) {
-      \Log::error('Login error: ' . $th->getMessage());
+      Log::error('Login error: ' . $th->getMessage());
       return new JsonResponse([
         'success' => false,
         'error' => 'Cannot login: ' . $th->getMessage()
@@ -450,7 +451,7 @@ class AuthenticationController extends Controller
       ], 200);
 
     } catch (\Throwable $th) {
-      \Log::error('Failed to fetch admin users: ' . $th->getMessage());
+      Log::error('Failed to fetch admin users: ' . $th->getMessage());
       return new JsonResponse([
         'success' => false,
         'error' => 'Failed to fetch admin users: ' . $th->getMessage()
@@ -512,7 +513,7 @@ class AuthenticationController extends Controller
         'created_at' => $now,
       ]);
 
-      \Log::info('Admin user created successfully', [
+      Log::info('Admin user created successfully', [
         'user_id' => $newAdmin->id,
         'username' => $newAdmin->username,
         'school_code' => $newAdmin->school_code,
@@ -527,7 +528,7 @@ class AuthenticationController extends Controller
         'success' => true,
         'data' => $newAdminData,
         'message' => 'Admin user created successfully'
-      ], 201);
+      ], 201); 
 
     } catch (\Illuminate\Validation\ValidationException $e) {
       return new JsonResponse([
@@ -536,7 +537,7 @@ class AuthenticationController extends Controller
         'errors' => $e->errors()
       ], 422);
     } catch (\Illuminate\Database\QueryException $e) {
-      \Log::error('Database Error: ' . $e->getMessage());
+      Log::error('Database Error: ' . $e->getMessage());
 
       if (str_contains($e->getMessage(), 'Duplicate entry')) {
         if (str_contains($e->getMessage(), 'username')) {
@@ -558,7 +559,7 @@ class AuthenticationController extends Controller
         'error' => 'Database error: ' . $e->getMessage()
       ], 500);
     } catch (\Exception $e) {
-      \Log::error('Failed to create admin user: ' . $e->getMessage());
+      Log::error('Failed to create admin user: ' . $e->getMessage());
       return new JsonResponse([
         'success' => false,
         'error' => 'Failed to create admin user: ' . $e->getMessage()
@@ -596,7 +597,7 @@ class AuthenticationController extends Controller
       ], 200);
 
     } catch (\Throwable $th) {
-      \Log::error('Failed to fetch admin user: ' . $th->getMessage());
+      Log::error('Failed to fetch admin user: ' . $th->getMessage());
       return new JsonResponse([
         'success' => false,
         'error' => 'Failed to fetch admin user'
@@ -662,7 +663,7 @@ class AuthenticationController extends Controller
         'account_status' => $validated['account_status'],
       ]);
 
-      \Log::info('Admin user updated', [
+      Log::info('Admin user updated', [
         'user_id' => $admin->id,
         'username' => $admin->username,
         'updated_by' => $user->id
@@ -684,7 +685,7 @@ class AuthenticationController extends Controller
         'errors' => $e->errors()
       ], 422);
     } catch (\Exception $e) {
-      \Log::error('Failed to update admin user: ' . $e->getMessage());
+      Log::error('Failed to update admin user: ' . $e->getMessage());
       return new JsonResponse([
         'success' => false,
         'error' => 'Failed to update admin user: ' . $e->getMessage()
@@ -723,7 +724,7 @@ class AuthenticationController extends Controller
       $admin->password = Hash::make($validated['password']);
       $admin->save();
 
-      \Log::info('Password reset for admin user', [
+      Log::info('Password reset for admin user', [
         'user_id' => $admin->id,
         'username' => $admin->username,
         'reset_by' => $user->id
@@ -741,7 +742,7 @@ class AuthenticationController extends Controller
         'errors' => $e->errors()
       ], 422);
     } catch (\Exception $e) {
-      \Log::error('Failed to reset password: ' . $e->getMessage());
+      Log::error('Failed to reset password: ' . $e->getMessage());
       return new JsonResponse([
         'success' => false,
         'error' => 'Failed to reset password: ' . $e->getMessage()
@@ -775,7 +776,7 @@ class AuthenticationController extends Controller
       ], 200);
 
     } catch (\Throwable $th) {
-      \Log::error('Failed to fetch schools list: ' . $th->getMessage());
+      Log::error('Failed to fetch schools list: ' . $th->getMessage());
       return new JsonResponse([
         'success' => false,
         'error' => 'Failed to fetch schools'
